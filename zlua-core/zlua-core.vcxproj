@@ -150,18 +150,22 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="src\bp.h" />
+    <ClInclude Include="src\action.h" />
+    <ClInclude Include="src\model.h" />
     <ClInclude Include="src\event.h" />
     <ClInclude Include="src\json.h" />
     <ClInclude Include="src\connect.h" />
+    <ClInclude Include="src\runtime.h" />
     <ClInclude Include="src\zlua.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\bp.cpp" />
+    <ClCompile Include="src\action.cpp" />
+    <ClCompile Include="src\model.cpp" />
     <ClCompile Include="src\event.cpp" />
     <ClCompile Include="src\json.cpp" />
     <ClCompile Include="src\lib.cpp" />
     <ClCompile Include="src\connect.cpp" />
+    <ClCompile Include="src\runtime.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

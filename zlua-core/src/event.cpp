@@ -1,14 +1,19 @@
 #include "event.h"
 #include "zlua.h"
-#include "bp.h"
+#include "model.h"
 #include "json.h"
 #include "stringbuffer.h"
 #include "writer.h"
 #include "connect.h"
+#include "action.h"
+#include "runtime.h"
+
+#define register_event(event, handle) events[(int)PROTO::event]=handle;
 
 typedef int (*fn)(conn_t* conn, const rapidjson::Document& document);
+fn events[(int)PROTO::count];
 
-fn events[(int)MESSAGE::COUNT];
+int event_send(conn_t* conn, PROTO proto, const rapidjson::Document& document);
 
 std::set<lua_State*> states;
 
@@ -23,26 +28,23 @@ void on_hook(lua_State* L, lua_Debug* ar) {
             document.SetObject();
             auto& alloc = document.GetAllocator();
 
-            document.AddMember("cmd", static_cast<int>(MESSAGE::BREAK_NOTIFY), alloc);
+            document.AddMember("cmd", static_cast<int>(PROTO::s2c_break_point_msg), alloc);
             stacks2json(document, stacks, alloc);
 
-            rapidjson::StringBuffer buffer;
-            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
-            document.Accept(writer);
-
-            conn_send(conn, static_cast<int>(MESSAGE::BREAK_NOTIFY), buffer.GetString(), buffer.GetSize());
+            event_send(conn, PROTO::s2c_break_point_msg, document);
+            do_action(Action::ide_break, L);
         }
     }
 }
 
-int event_init_req(conn_t* conn, const rapidjson::Document& document) {
+int event_init(conn_t* conn, const rapidjson::Document& document) {
     for (auto L : states)
         lua_sethook(L, on_hook, LUA_MASKCALL | LUA_MASKLINE | LUA_MASKRET, 0);
 
     return true;
 }
 
-int event_add_bp_req(conn_t* conn, const rapidjson::Document& document) {
+int event_add_bp(conn_t* conn, const rapidjson::Document& document) {
     if (document.HasMember("clear")) {
         const auto isclear = document["clear"].GetBool();
         if (isclear) {
@@ -63,9 +65,35 @@ int event_add_bp_req(conn_t* conn, const rapidjson::Document& document) {
     return true;
 }
 
+int event_eval(conn_t* conn, const rapidjson::Document& document) {
+    eval_t eval;
+    json2eval(eval, document);
+    for (auto L : states)
+        if (rt_eval_cache(eval, L)) {
+            rapidjson::Document document;
+            document.SetObject();
+            auto& alloc = document.GetAllocator();
+
+            eval2json(document, eval, alloc);
+            event_send(conn, PROTO::s2c_eval, document);
+        }
+
+    return true;
+}
+
+int event_action(conn_t* conn, const rapidjson::Document& document) {
+    const auto action = static_cast<Action>(document["action"].GetInt());
+    for (auto L : states)
+        do_action(action, L);
+
+    return true;
+}
+
 void event_init() {
-    events[(int)MESSAGE::INIT_REQUEST]            = event_init_req;
-    events[(int)MESSAGE::ADD_BREAK_POINT_REQUEST] = event_add_bp_req;
+    register_event(c2s_init,            event_init);
+    register_event(c2s_add_break_point, event_add_bp);
+    register_event(c2s_action,          event_action);
+    register_event(c2s_eval,            event_eval);
 }
 
 void event_add_state(lua_State* L)
@@ -85,6 +113,12 @@ int event_handle(conn_t* conn, const char* buf, size_t len) {
     return events[type](conn, document);
 }
 
-int event_send(MESSAGE proto, const rapidjson::Document& document) {
-    int cmd = static_cast<int>(proto);
+int event_send(conn_t* conn, PROTO proto, const rapidjson::Document& document) {
+    rapidjson::StringBuffer buffer;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+    document.Accept(writer);
+
+    conn_send(conn, static_cast<int>(proto), buffer.GetString(), buffer.GetSize());
+
+    return true;
 }

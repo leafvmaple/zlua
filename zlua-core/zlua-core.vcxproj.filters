@@ -24,10 +24,16 @@
     <ClInclude Include="src\json.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\bp.h">
+    <ClInclude Include="src\event.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="src\event.h">
+    <ClInclude Include="src\action.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\runtime.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\model.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
@@ -41,10 +47,16 @@
     <ClCompile Include="src\json.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\bp.cpp">
+    <ClCompile Include="src\event.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\event.cpp">
+    <ClCompile Include="src\action.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\runtime.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\model.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

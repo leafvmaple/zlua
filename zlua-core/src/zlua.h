@@ -57,19 +57,30 @@ extern "C"
     ZLUA_API int lua_getinfo(lua_State* L, const char* what, lua_Debug* ar);
     ZLUA_API const char* lua_getlocal(lua_State* L, const lua_Debug* ar, int n);
     ZLUA_API const char* lua_getupvalue(lua_State* L, int funcindex, int n);
+    ZLUA_API int lua_getmetatable(lua_State* L, int objindex);
+
+    ZLUA_API void lua_getfield(lua_State* L, int idx, const char* k);
+    ZLUA_API void lua_setfield(lua_State* L, int idx, const char* k);
 
     ZLUA_API int lua_sethook(lua_State* L, lua_Hook func, int mask, int count);
 
     ZLUA_API void lua_settop(lua_State* L, int idx);
     ZLUA_API int lua_gettop(lua_State* L);
+
     ZLUA_API int lua_absindex(lua_State* L, int idx);
     ZLUA_API int lua_type(lua_State* L, int idx);
     ZLUA_API int lua_toboolean(lua_State* L, int idx);
-    ZLUA_API int lua_getmetatable(lua_State* L, int objindex);
 
     ZLUA_API const char* lua_typename(lua_State* L, int t);
     ZLUA_API const char* lua_tolstring(lua_State* L, int idx, size_t* len);
     ZLUA_API const void* lua_topointer(lua_State* L, int index);
+    
+    ZLUA_API int lua_next(lua_State* L, int idx);
+
+    ZLUA_API void lua_pushnil(lua_State* L);
+    ZLUA_API void lua_pushvalue(lua_State* L, int idx);
+
+    ZLUA_API void lua_createtable(lua_State* L, int narr, int nrec);
 }
 
 #endif
@@ -81,6 +92,20 @@ extern "C"
 #ifndef lua_tostring
 #define lua_tostring(L,i)	lua_tolstring(L, (i), NULL)
 #endif
+
+#ifndef lua_isnil
+#define lua_isnil(L,n)		(lua_type(L, (n)) == LUA_TNIL)
+#endif
+
+#ifndef LUA_REGISTRYINDEX
+#define LUA_REGISTRYINDEX	(-10000)
+#endif
+
+#ifndef lua_newtable
+#define lua_newtable(L)		lua_createtable(L, 0, 0)
+#endif
+
+#define STR_LEN 260
 
 #ifdef LUA_51
 extern "C" {

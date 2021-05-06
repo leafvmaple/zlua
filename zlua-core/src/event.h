@@ -5,39 +5,47 @@
 
 struct conn_t;
 
-enum class MESSAGE {
-    UNKNOWN,
+enum class PROTO {
+    unknown,
 
-    INIT_REQUEST,
-    INTI_RESPOND,
+    c2s_init,
+    s2c_init,
 
-    READY_REQUEST,
-    READY_RESPOND,
+    c2s_ready,
+    s2c_ready,
 
-    ADD_BREAK_POINT_REQUEST,
-    ADD_BREAK_POINT_RESPOND,
+    c2s_add_break_point,
+    s2c_add_break_point,
 
-    REMOVE_BREAK_POINT_REQUEST,
-    REMOVE_BREAK_POINT_RESPOND,
+    c2s_remove_break_point,
+    s2c_remove_break_point,
 
-    ActionReq,
-    ActionRsp,
+    c2s_action,
+    s2c_action,
 
-    EvalReq,
-    EvalRsp,
+    c2s_eval,
+    s2c_eval,
 
-    // debugger -> ide
-    BREAK_NOTIFY,
-    AttachedNotify,
+    s2c_break_point_msg,
+    s2c_attach_msg,
 
-    StartHookReq,
-    StartHookRsp,
+    c2s_start_hook,
+    s2c_start_hook,
 
-    // debugger -> ide
-    LogNotify,
+    s2c_log_msg,
 
-    COUNT,
+    count,
 };
+
+enum class Action {
+    ide_break,
+    ide_continue,
+    ide_step_oever,
+    ide_step_in,
+    ide_step_out,
+    ide_stop,
+};
+
 
 void event_init();
 void event_add_state(lua_State* L);

@@ -26,7 +26,7 @@ int var2json(rapidjson::Value& container, const variable_t* var, rapidjson::Memo
     container.AddMember("value", GBK2UTF8(var->value), alloc);
     container.AddMember("valueType", var->value_type, alloc);
     container.AddMember("valueTypeName", std::string(var->value_type_name), alloc);
-    container.AddMember("cacheId", var->cacheId, alloc);
+    container.AddMember("cacheId", var->cache_id, alloc);
 
     if (!var->childs.empty()) {
         rapidjson::Value json_child_vars(rapidjson::kArrayType);
@@ -72,6 +72,21 @@ int stacks2json(rapidjson::Document& document, std::vector<stack_t*>& stacks, ra
     return true;
 }
 
+int eval2json(rapidjson::Document& document, const eval_t& eval, rapidjson::MemoryPoolAllocator<>& alloc)
+{
+    document.AddMember("seq", eval.seq, alloc);
+    document.AddMember("success", eval.success, alloc);
+    if (eval.success) {
+        rapidjson::Value v(rapidjson::kObjectType);
+        var2json(v, &eval.result, alloc);
+        document.AddMember("value", v, alloc);
+    }
+    else {
+        document.AddMember("error", eval.error, alloc);
+    }
+    return true;
+}
+
 int json2bp(breakpoint_t& bp, const rapidjson::Value& value) {
     if (value.HasMember("file")) {
         strcpy(bp.file, value["file"].GetString());
@@ -86,6 +101,18 @@ int json2bp(breakpoint_t& bp, const rapidjson::Value& value) {
     if (value.HasMember("logMessage")) {
         strcpy(bp.log, value["file"].GetString());
     }
+
+    return true;
+}
+
+int json2eval(eval_t& eval, const rapidjson::Value& value)
+{
+    eval.seq = value["seq"].GetInt();
+    strcpy(eval.expr, value["expr"].GetString());
+    eval.level = value["stackLevel"].GetInt();
+    eval.depth = value["depth"].GetInt();
+    eval.cache_id = value.HasMember("cacheId") ? value["cacheId"].GetInt() : 0;
+    eval.success = false;
 
     return true;
 }
