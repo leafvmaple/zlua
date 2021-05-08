@@ -44,6 +44,7 @@ enum class Action {
     ide_step_in,
     ide_step_out,
     ide_stop,
+    count,
 };
 
 

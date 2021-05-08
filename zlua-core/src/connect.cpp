@@ -156,9 +156,8 @@ int conn_send(conn_t* conn, int cmd, const char* data, int len)
     const int l1 = sprintf(cmdValue, "%d\n", cmd);
     const size_t newLen = len + l1 + 1;
     char* newData = static_cast<char*>(malloc(newLen));
-    // line1
+
     memcpy(newData, cmdValue, l1);
-    // line2
     memcpy(newData + l1, data, len);
     newData[newLen - 1] = '\n';
     writeReq->buf = uv_buf_init(newData, newLen);

@@ -17,22 +17,30 @@ int event_send(conn_t* conn, PROTO proto, const rapidjson::Document& document);
 
 std::set<lua_State*> states;
 
+void send_data(conn_t* conn, lua_State* L) {
+    std::vector<stack_t*> stacks;
+    rt2stacks(stacks, L);
+
+    rapidjson::Document document;
+    document.SetObject();
+    auto& alloc = document.GetAllocator();
+
+    document.AddMember("cmd", static_cast<int>(PROTO::s2c_break_point_msg), alloc);
+    stacks2json(document, stacks, alloc);
+    event_send(conn, PROTO::s2c_break_point_msg, document);
+
+    action_break(L);
+}
+
 void on_hook(lua_State* L, lua_Debug* ar) {
     if (ar->event == LUA_HOOKLINE) {
         conn_t* conn = bp_find(L, ar);
         if (conn) {
-            std::vector<stack_t*> stacks;
-            rt2stacks(stacks, L);
-
-            rapidjson::Document document;
-            document.SetObject();
-            auto& alloc = document.GetAllocator();
-
-            document.AddMember("cmd", static_cast<int>(PROTO::s2c_break_point_msg), alloc);
-            stacks2json(document, stacks, alloc);
-
-            event_send(conn, PROTO::s2c_break_point_msg, document);
-            do_action(Action::ide_break, L);
+            send_data(conn, L);
+        }
+        conn = action_find(L, ar);
+        if (conn) {
+            send_data(conn, L);
         }
     }
 }
@@ -84,7 +92,7 @@ int event_eval(conn_t* conn, const rapidjson::Document& document) {
 int event_action(conn_t* conn, const rapidjson::Document& document) {
     const auto action = static_cast<Action>(document["action"].GetInt());
     for (auto L : states)
-        do_action(action, L);
+        action_excute(action, conn, L);
 
     return true;
 }
