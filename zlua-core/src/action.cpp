@@ -57,8 +57,6 @@ int update_step_over(action_t* action, lua_State* L, lua_Debug* ar) {
 }
 
 int update_step_in(action_t* action, lua_State* L, lua_Debug* ar) {
-    get_stack_level(L);
-
     if (ar->currentline != action->line) {
         return true;
     }

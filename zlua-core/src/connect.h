@@ -28,5 +28,5 @@ typedef struct {
 } write_req_t;
 
 conn_t* conn_new();
-int conn_listen(conn_t* conn, const char* host, int port, const char* err);
+int conn_listen(conn_t* conn, const char* host, int port, char* err);
 int conn_send(conn_t* conn, int cmd, const char* data, int len);

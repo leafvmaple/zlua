@@ -41,9 +41,9 @@ void on_after_read(uv_stream_t* client, ssize_t nread, const uv_buf_t* buf) {
 }
 
 static void on_after_write(uv_write_t* req, int status) {
-    const auto* writeReq = reinterpret_cast<write_req_t*>(req);
-    free(writeReq->buf.base);
-    delete writeReq;
+    const auto* write_req = reinterpret_cast<write_req_t*>(req);
+    free(write_req->buf.base);
+    delete write_req;
 }
 
 static void on_after_async(uv_handle_t* h) {
@@ -77,40 +77,7 @@ conn_t* conn_new() {
 }
 
 int conn_receive(conn_t* conn, const char* data, size_t len) {
-    if (conn->maxsize < conn->size + len) {
-        conn->buf = static_cast<char*>(realloc(conn->buf, conn->size + len));
-        if (!conn->buf)
-            return 0;
-        conn->maxsize = conn->size + len;
-    }
-    memcpy(conn->buf + conn->size, data, len);
-    conn->size += len;
-
-    size_t pos = 0;
-    while (true) {
-        size_t start = pos;
-        for (size_t i = pos; i < conn->size; i++) {
-            if (data[i] == '\n') {
-                pos = i + 1;
-                break;
-            }
-        }
-        if (start != pos) {
-            if (!conn->head) {
-                // skip
-            }
-            else {
-                event_handle(conn, conn->buf + start, pos - start);
-            }
-            conn->head = !conn->head;
-        }
-        else break;
-    }
-
-    if (pos > 0) {
-        memcpy(conn->buf, conn->buf + pos, conn->size - pos);
-        conn->size -= pos;
-    }
+    event_handle(conn, data, len);
 
     return true;
 }
@@ -128,7 +95,7 @@ DWORD conn_thread(void* ptr) {
     return 0;
 }
 
-int conn_listen(conn_t* conn, const char* host, int port, const char* err) {
+int conn_listen(conn_t* conn, const char* host, int port, char* err) {
     sockaddr_in addr;
 
     conn->server.data = conn;
@@ -138,7 +105,9 @@ int conn_listen(conn_t* conn, const char* host, int port, const char* err) {
     uv_tcp_bind(&conn->server, reinterpret_cast<const struct sockaddr*>(&addr), 0);
     const int r = uv_listen(reinterpret_cast<uv_stream_t*>(&conn->server), SOMAXCONN, on_new_connection);
     if (r) {
-        err = uv_strerror(r);
+        if (err) {
+            strcpy(err, uv_strerror(r));
+        }
         return false;
     }
     
@@ -151,21 +120,18 @@ int conn_send(conn_t* conn, int cmd, const char* data, int len)
 {
     uv_stream_t* client = (uv_stream_t*)&conn->client;
 
-    auto* writeReq = new write_req_t;
-    char cmdValue[100];
-    const int l1 = sprintf(cmdValue, "%d\n", cmd);
-    const size_t newLen = len + l1 + 1;
-    char* newData = static_cast<char*>(malloc(newLen));
+    auto* write_req = new write_req_t;
+    char* buf = static_cast<char*>(malloc(len));
+    if (!buf)
+        return 0;
 
-    memcpy(newData, cmdValue, l1);
-    memcpy(newData + l1, data, len);
-    newData[newLen - 1] = '\n';
-    writeReq->buf = uv_buf_init(newData, newLen);
-    writeReq->stream = client;
+    memcpy(buf, data, len);
+    write_req->buf = uv_buf_init(buf, len);
+    write_req->stream = client;
 
     // thread safe:
     auto* async = new uv_async_t;
-    async->data = writeReq;
+    async->data = write_req;
     uv_async_init(conn->loop, async, on_async_write);
     uv_async_send(async);
 

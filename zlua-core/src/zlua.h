@@ -113,5 +113,5 @@ extern "C" {
 }
 #endif
 
-int zlua_init(const char* host, int port, const char* err);
+int zlua_listen(const char* host, int port, char* err = nullptr);
 int zlua_add(lua_State* L);

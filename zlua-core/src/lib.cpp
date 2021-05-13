@@ -13,7 +13,7 @@ int lua_absindex(lua_State* L, int idx) {
 }
 #endif
 
-int zlua_init(const char* host, int port, const char* err){
+int zlua_listen(const char* host, int port, char* err){
     conn_t* conn = conn_new();
     if (!conn)
         return 0;
