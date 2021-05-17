@@ -3,6 +3,7 @@
 #include "zlua.h"
 #include "event.h"
 #include "connect.h"
+#include "runtime.h"
 
 #ifdef LUA_51
 int lua_absindex(lua_State* L, int idx) {
@@ -13,16 +14,29 @@ int lua_absindex(lua_State* L, int idx) {
 }
 #endif
 
+int zlua_init() {
+    event_init();
+
+    return true;
+}
+
 int zlua_listen(const char* host, int port, char* err){
     conn_t* conn = conn_new();
     if (!conn)
         return 0;
 
-    event_init();
     return conn_listen(conn, host, port, err);
 }
 
-int zlua_add(lua_State* L) {
+int zlua_add_state(lua_State* L) {
     event_add_state(L);
+
+    lua_newtable(L, -1);
+    lua_setglobal(L, "zlua");
+
     return true;
+}
+
+int zlua_set_parser(int type, fn_parser parser) {
+    return rt_set_parser(type, parser);
 }

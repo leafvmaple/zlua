@@ -77,7 +77,49 @@ conn_t* conn_new() {
 }
 
 int conn_receive(conn_t* conn, const char* data, size_t len) {
-    event_handle(conn, data, len);
+#ifdef EMMY
+    if (conn->maxsize < conn->size + len) {
+        conn->buf = static_cast<char*>(realloc(conn->buf, conn->size + len));
+        if (!conn->buf)
+            return 0;
+        conn->maxsize = conn->size + len;
+    }
+    memcpy(conn->buf + conn->size, data, len);
+    conn->size += len;
+
+    size_t pos = 0;
+    while (true) {
+        size_t start = pos;
+        for (size_t i = pos; i < conn->size; i++) {
+            if (data[i] == '\n') {
+                pos = i + 1;
+                break;
+            }
+        }
+        if (start != pos) {
+            if (!conn->head) {
+                // skip
+            }
+            else {
+                event_handle(conn, conn->buf + start, pos - start);
+            }
+            conn->head = !conn->head;
+        }
+        else break;
+    }
+
+    if (pos > 0) {
+        memcpy(conn->buf, conn->buf + pos, conn->size - pos);
+        conn->size -= pos;
+    }
+#else
+    const char* end = data + len;
+    while (data < end) {
+        int len = strlen(data);
+        event_handle(conn, data, len);
+        data += len + 1;
+    }
+#endif
 
     return true;
 }
@@ -120,6 +162,23 @@ int conn_send(conn_t* conn, int cmd, const char* data, int len)
 {
     uv_stream_t* client = (uv_stream_t*)&conn->client;
 
+#ifdef EMMY
+    auto* writeReq = new write_req_t;
+    char cmdValue[100];
+    const int l1 = sprintf(cmdValue, "%d\n", cmd);
+    const size_t newLen = len + l1 + 1;
+    char* newData = static_cast<char*>(malloc(newLen));
+
+    memcpy(newData, cmdValue, l1);
+    memcpy(newData + l1, data, len);
+    newData[newLen - 1] = '\n';
+    writeReq->buf = uv_buf_init(newData, newLen);
+    writeReq->stream = client;
+
+    auto* async = new uv_async_t;
+    async->data = writeReq;
+#else
+
     auto* write_req = new write_req_t;
     char* buf = static_cast<char*>(malloc(len));
     if (!buf)
@@ -132,6 +191,8 @@ int conn_send(conn_t* conn, int cmd, const char* data, int len)
     // thread safe:
     auto* async = new uv_async_t;
     async->data = write_req;
+
+#endif
     uv_async_init(conn->loop, async, on_async_write);
     uv_async_send(async);
 

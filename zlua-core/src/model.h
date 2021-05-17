@@ -36,9 +36,9 @@ struct path_t {
 
 struct breakpoint_t {
     int line;
-    char file[STR_LEN];
-    char cond[STR_LEN];
-    char log[STR_LEN];
+    char file[ZLUA_FILE_MAX];
+    char cond[ZLUA_FILE_MAX];
+    char log[ZLUA_FILE_MAX];
 
     path_t path;
 

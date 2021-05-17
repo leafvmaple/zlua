@@ -52,6 +52,7 @@ struct lua_Debug {
 extern "C"
 {
     typedef void (*lua_Hook) (lua_State* L, lua_Debug* ar);
+    typedef int (*lua_CFunction) (lua_State* L);
 
     ZLUA_API int lua_getstack(lua_State* L, int level, lua_Debug* ar);
     ZLUA_API int lua_getinfo(lua_State* L, const char* what, lua_Debug* ar);
@@ -61,11 +62,15 @@ extern "C"
 
     ZLUA_API void lua_getfield(lua_State* L, int idx, const char* k);
     ZLUA_API void lua_setfield(lua_State* L, int idx, const char* k);
+    ZLUA_API void lua_rawset(lua_State* L, int idx);
 
     ZLUA_API int lua_sethook(lua_State* L, lua_Hook func, int mask, int count);
 
     ZLUA_API void lua_settop(lua_State* L, int idx);
     ZLUA_API int lua_gettop(lua_State* L);
+    ZLUA_API void lua_remove(lua_State* L, int idx);
+
+    ZLUA_API void lua_rawget(lua_State* L, int idx);
 
     ZLUA_API int lua_absindex(lua_State* L, int idx);
     ZLUA_API int lua_type(lua_State* L, int idx);
@@ -78,11 +83,27 @@ extern "C"
     ZLUA_API int lua_next(lua_State* L, int idx);
 
     ZLUA_API void lua_pushnil(lua_State* L);
+    ZLUA_API void lua_pushstring(lua_State* L, const char* s);
+    ZLUA_API void lua_pushcclosure(lua_State* L, lua_CFunction fn, int n);
     ZLUA_API void lua_pushvalue(lua_State* L, int idx);
 
     ZLUA_API void lua_createtable(lua_State* L, int narr, int nrec);
+
+    ZLUA_API int lua_pcall(lua_State* L, int nargs, int nresults, int errfunc);
 }
 
+#endif
+
+#ifndef LUA_GLOBALSINDEX
+#define LUA_GLOBALSINDEX (-10002)
+#endif
+
+#ifndef LUA_REGISTRYINDEX
+#define LUA_REGISTRYINDEX (-10000)
+#endif
+
+#ifndef LUA_OK
+#define LUA_OK 0
 #endif
 
 #ifndef lua_pop
@@ -90,22 +111,42 @@ extern "C"
 #endif
 
 #ifndef lua_tostring
-#define lua_tostring(L,i)	lua_tolstring(L, (i), NULL)
+#define lua_tostring(L,i) lua_tolstring(L, (i), NULL)
 #endif
 
 #ifndef lua_isnil
-#define lua_isnil(L,n)		(lua_type(L, (n)) == LUA_TNIL)
+#define lua_isnil(L,n) (lua_type(L, (n)) == LUA_TNIL)
 #endif
 
-#ifndef LUA_REGISTRYINDEX
-#define LUA_REGISTRYINDEX	(-10000)
-#endif
 
 #ifndef lua_newtable
-#define lua_newtable(L)		lua_createtable(L, 0, 0)
+#define lua_newtable(L) lua_createtable(L, 0, 0)
 #endif
 
-#define STR_LEN 260
+#ifndef lua_pushcfunction
+#define lua_pushcfunction(L,f) lua_pushcclosure(L, (f), 0)
+#endif
+
+#ifndef lua_getglobal
+#define lua_getglobal(L,s) lua_getfield(L, LUA_GLOBALSINDEX, (s))
+#endif
+
+#ifndef lua_setglobal
+#define lua_setglobal(L,s) lua_setfield(L, LUA_GLOBALSINDEX, (s))
+#endif
+
+#ifndef lua_isfunction
+#define lua_isfunction(L,n) (lua_type(L, (n)) == LUA_TFUNCTION)
+#endif
+
+#ifndef lua_istable
+#define lua_istable(L,n) (lua_type(L, (n)) == LUA_TTABLE)
+#endif
+
+#define ZLUA_FILE_MAX 260
+#define ZLUA_TYPE_COUNT 9
+
+#define EMMY
 
 #ifdef LUA_51
 extern "C" {
@@ -113,5 +154,10 @@ extern "C" {
 }
 #endif
 
+typedef int (*fn_parser)(lua_State* L);
+
+int zlua_init();
 int zlua_listen(const char* host, int port, char* err = nullptr);
-int zlua_add(lua_State* L);
+int zlua_add_state(lua_State* L);
+
+extern int zlua_set_parser(int type, fn_parser parser);

@@ -12,7 +12,7 @@ struct action_t;
 typedef int (*fn)(action_t* action, lua_State* L, lua_Debug* ar);
 
 struct action_t {
-    char file[STR_LEN];
+    char file[ZLUA_FILE_MAX];
     int line = 0;
     int stack_level;
 

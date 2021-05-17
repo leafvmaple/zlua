@@ -1,13 +1,12 @@
 #pragma once
 
 #include "zlua.h"
-
 #include <vector>
 
 struct variable_t {
-    char name[STR_LEN];
+    char name[ZLUA_FILE_MAX];
     int name_type;
-    char value[STR_LEN];
+    char value[ZLUA_FILE_MAX];
     int value_type;
     const char* value_type_name;
     std::vector<variable_t*> childs;
@@ -36,8 +35,8 @@ struct stack_t {
 };
 
 struct eval_t {
-    char expr[STR_LEN];
-    char error[STR_LEN];
+    char expr[ZLUA_FILE_MAX];
+    char error[ZLUA_FILE_MAX];
     int seq;
     int level;
     int depth;
@@ -46,7 +45,9 @@ struct eval_t {
     bool success;
 };
 
-int rt2stacks(std::vector<stack_t*>& stacks, lua_State* L);
-
 void rt_clear_cache(lua_State* L);
 int rt_eval_cache(eval_t& eval, lua_State* L);
+
+int rt_set_parser(int type, fn_parser parser);
+
+int rt2stacks(std::vector<stack_t*>& stacks, lua_State* L);

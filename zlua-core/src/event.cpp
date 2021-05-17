@@ -13,7 +13,7 @@
 typedef int (*fn)(conn_t* conn, const rapidjson::Document& document);
 fn events[(int)PROTO::count];
 
-int event_send(conn_t* conn, PROTO proto, const rapidjson::Document& document);
+int event_send(conn_t* conn, PROTO proto, rapidjson::Document& document, rapidjson::MemoryPoolAllocator<>& alloc);
 
 std::set<lua_State*> states;
 
@@ -23,11 +23,10 @@ void send_data(conn_t* conn, lua_State* L) {
 
     rapidjson::Document document;
     document.SetObject();
-    auto& alloc = document.GetAllocator();
+    rapidjson::MemoryPoolAllocator<>& alloc = document.GetAllocator();
 
-    document.AddMember("cmd", static_cast<int>(PROTO::s2c_break_point_msg), alloc);
     stacks2json(document, stacks, alloc);
-    event_send(conn, PROTO::s2c_break_point_msg, document);
+    event_send(conn, PROTO::s2c_break_point_msg, document, alloc);
 
     action_break(L);
 }
@@ -83,7 +82,7 @@ int event_eval(conn_t* conn, const rapidjson::Document& document) {
             auto& alloc = document.GetAllocator();
 
             eval2json(document, eval, alloc);
-            event_send(conn, PROTO::s2c_eval, document);
+            event_send(conn, PROTO::s2c_eval, document, alloc);
         }
 
     return true;
@@ -121,7 +120,9 @@ int event_handle(conn_t* conn, const char* buf, size_t len) {
     return events[type](conn, document);
 }
 
-int event_send(conn_t* conn, PROTO proto, const rapidjson::Document& document) {
+int event_send(conn_t* conn, PROTO proto, rapidjson::Document& document, rapidjson::MemoryPoolAllocator<>& alloc) {
+    document.AddMember("cmd", static_cast<int>(proto), alloc);
+
     rapidjson::StringBuffer buffer;
     rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
     document.Accept(writer);

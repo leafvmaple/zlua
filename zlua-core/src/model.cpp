@@ -10,8 +10,8 @@ std::mutex mutex_bp;
 std::map<DWORD, std::vector<breakpoint_t>> bp_set;
 
 int str2paths(path_t& path, const char* str) {
-    char t[STR_LEN];
-    if (strlen(str) >= STR_LEN) {
+    char t[ZLUA_FILE_MAX];
+    if (strlen(str) >= ZLUA_FILE_MAX) {
         return false;
     }
     strcpy(t, str);
