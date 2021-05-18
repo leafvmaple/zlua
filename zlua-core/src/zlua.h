@@ -146,7 +146,7 @@ extern "C"
 #define ZLUA_FILE_MAX 260
 #define ZLUA_TYPE_COUNT 9
 
-#define EMMY
+//#define EMMY
 
 #ifdef LUA_51
 extern "C" {

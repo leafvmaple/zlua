@@ -15,6 +15,7 @@ int lua_absindex(lua_State* L, int idx) {
 #endif
 
 int zlua_init() {
+    rt_init();
     event_init();
 
     return true;

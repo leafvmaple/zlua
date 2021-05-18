@@ -5,6 +5,7 @@
 int cache_gen = 0;
 
 fn_parser parsers[ZLUA_TYPE_COUNT];
+int filter[ZLUA_TYPE_COUNT];
 
 int rt2var(variable_t* var, lua_State* L, int index, int depth);
 
@@ -47,8 +48,12 @@ void rt_parser(variable_t* var, lua_State* L) {
             strcpy(v->name, lua_tostring(L, -1));
             lua_pop(L, 1);
 
-            rt2var(v, L, -1, 1);
-            var->childs.push_back(v);
+            if (rt2var(v, L, -1, 1)) {
+                var->childs.push_back(v);
+            }
+            else {
+                delete v;
+            }
 
             lua_pop(L, 1);
         }
@@ -99,6 +104,14 @@ int rt_add_cache(lua_State* L, int idx, variable_t* var) {
     return true;
 }
 
+void rt_init()
+{
+    memset(parsers, 0, sizeof(parsers));
+    memset(filter, 0, sizeof(filter));
+
+    filter[LUA_TFUNCTION] = true;
+}
+
 void rt_clear_cache(lua_State* L) {
     lua_getfield(L, LUA_REGISTRYINDEX, CACHE_TABLE_NAME);
     if (!lua_isnil(L, -1)) {
@@ -145,6 +158,10 @@ int rt2var(variable_t* var, lua_State* L, int index, int depth) {
     index = lua_absindex(L, index);
     
     int type = lua_type(L, index);
+
+    if (filter[type]) {
+        return false;
+    }
 
     var->name_type = LUA_TSTRING;
     var->value_type = type;
@@ -220,8 +237,13 @@ int rt2var(variable_t* var, lua_State* L, int index, int depth) {
                 else {
                     rt2pt(v->name, L, -2);
                 }
-                rt2var(v, L, -1, depth - 1);
-                var->childs.push_back(v);
+
+                if (rt2var(v, L, -1, depth - 1)) {
+                    var->childs.push_back(v);
+                }
+                else {
+                    delete v;
+                }
             }
             lua_pop(L, 1);
             size++;
@@ -232,8 +254,12 @@ int rt2var(variable_t* var, lua_State* L, int index, int depth) {
             strcpy(meta->name, "metatable");
             meta->name_type = LUA_TSTRING;
 
-            rt2var(meta, L, -1, 2);
-            var->childs.push_back(meta);
+            if (rt2var(meta, L, -1, 2)) {
+                var->childs.push_back(meta);
+            }
+            else {
+                delete meta;
+            }
 
             {
                 lua_getfield(L, -1, "__index");
@@ -287,10 +313,13 @@ int rt2stacks(std::vector<stack_t*>& stacks, lua_State* L) {
             }
 
             auto var = new variable_t;
-            stack->local_vars.push_back(var);
-
             strcpy(var->name, name);
-            rt2var(var, L, -1, 1);
+            if (rt2var(var, L, -1, 1)) {
+                stack->local_vars.push_back(var);
+            }
+            else {
+                delete var;
+            }
             lua_pop(L, 1);
         }
 
@@ -304,10 +333,14 @@ int rt2stacks(std::vector<stack_t*>& stacks, lua_State* L) {
 
                 // add up variable
                 auto var = new variable_t;
-                stack->upvalue_vars.push_back(var);
-
                 strcpy(var->name, name);
-                rt2var(var, L, -1, 1);
+                if (rt2var(var, L, -1, 1)) {
+                    stack->upvalue_vars.push_back(var);
+                }
+                else {
+                    delete var;
+                }
+
                 lua_pop(L, 1);
             }
             // pop function

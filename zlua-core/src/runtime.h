@@ -45,6 +45,8 @@ struct eval_t {
     bool success;
 };
 
+void rt_init();
+
 void rt_clear_cache(lua_State* L);
 int rt_eval_cache(eval_t& eval, lua_State* L);
 
