@@ -78,6 +78,7 @@ extern "C"
 
     ZLUA_API const char* lua_typename(lua_State* L, int t);
     ZLUA_API const char* lua_tolstring(lua_State* L, int idx, size_t* len);
+    ZLUA_API size_t lua_objlen (lua_State* L, int idx);
     ZLUA_API const void* lua_topointer(lua_State* L, int index);
     
     ZLUA_API int lua_next(lua_State* L, int idx);
@@ -143,8 +144,13 @@ extern "C"
 #define lua_istable(L,n) (lua_type(L, (n)) == LUA_TTABLE)
 #endif
 
+#ifndef lua_strlen
+#define lua_strlen(L,i)		lua_objlen(L, (i))
+#endif
+
 #define ZLUA_FILE_MAX 260
 #define ZLUA_TYPE_COUNT 9
+
 
 //#define EMMY
 

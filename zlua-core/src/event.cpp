@@ -18,7 +18,7 @@ int event_send(conn_t* conn, PROTO proto, rapidjson::Document& document, rapidjs
 std::set<lua_State*> states;
 
 void send_data(conn_t* conn, lua_State* L) {
-    std::vector<stack_t*> stacks;
+    std::vector<stack_t> stacks;
     rt2stacks(stacks, L);
 
     rapidjson::Document document;
@@ -45,8 +45,27 @@ void on_hook(lua_State* L, lua_Debug* ar) {
 }
 
 int event_init(conn_t* conn, const rapidjson::Document& document) {
-    for (auto L : states)
+    for (auto L : states) {
         lua_sethook(L, on_hook, LUA_MASKCALL | LUA_MASKLINE | LUA_MASKRET, 0);
+    }
+
+    if (document.HasMember("globals")) {
+        const auto globals = document["globals"].GetArray();
+        for (auto it = globals.begin(); it != globals.end(); it++) {
+            rt_add_global(it->GetString());
+        }
+    }
+
+    if (document.HasMember("filters")) {
+        const auto filters = document["filters"].GetArray();
+        for (auto it = filters.begin(); it != filters.end(); it++) {
+            for (int i = 0; i < ZLUA_TYPE_COUNT; i++) {
+                if (!strcmp(lua_typename(nullptr, i), it->GetString())) {
+                    rt_set_filter(i, true);
+                }
+            }
+        }
+    }
 
     return true;
 }

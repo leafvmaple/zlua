@@ -4,8 +4,17 @@
 
 int cache_gen = 0;
 
+struct ZString {
+    char s[ZLUA_FILE_MAX];
+    ZString(const char* in) {
+        strcpy(s, in);
+    }
+};
+
 fn_parser parsers[ZLUA_TYPE_COUNT];
-int filter[ZLUA_TYPE_COUNT];
+int filters[ZLUA_TYPE_COUNT];
+std::vector<ZString> globals;
+
 
 int rt2var(variable_t* var, lua_State* L, int index, int depth);
 
@@ -13,6 +22,19 @@ int rt_set_parser(int type, fn_parser parser) {
     parsers[type] = parser;
     return true;
 }
+
+int rt_set_filter(int type, int enable)
+{
+    filters[type] = enable;
+    return true;
+}
+
+int rt_add_global(const char* global)
+{
+    globals.push_back(global);
+    return true;
+}
+
 
 void rt_parser(variable_t* var, lua_State* L) {
     int top = lua_gettop(L);
@@ -41,18 +63,15 @@ void rt_parser(variable_t* var, lua_State* L) {
 
         lua_pushnil(L);
         while (lua_next(L, -2)) {
-            variable_t* v = new variable_t;
-            v->name_type = lua_type(L, -1);
+            variable_t v;
+            v.name_type = lua_type(L, -1);
 
             lua_pushvalue(L, -2);
-            strcpy(v->name, lua_tostring(L, -1));
+            strcpy(v.name, lua_tostring(L, -1));
             lua_pop(L, 1);
 
-            if (rt2var(v, L, -1, 1)) {
+            if (rt2var(&v, L, -1, 1)) {
                 var->childs.push_back(v);
-            }
-            else {
-                delete v;
             }
 
             lua_pop(L, 1);
@@ -63,7 +82,7 @@ void rt_parser(variable_t* var, lua_State* L) {
     lua_settop(L, top);
 }
 
-variable_t* var_clone(variable_t* src) {
+/*variable_t* var_clone(variable_t* src) {
     variable_t* res = new variable_t;
 
     strcpy(res->name, src->name);
@@ -78,7 +97,7 @@ variable_t* var_clone(variable_t* src) {
     res->cache_id = src->cache_id;
 
     return res;
-}
+}*/
 
 int rt_add_cache(lua_State* L, int idx, variable_t* var) {
     const int type = lua_type(L, idx);
@@ -107,9 +126,8 @@ int rt_add_cache(lua_State* L, int idx, variable_t* var) {
 void rt_init()
 {
     memset(parsers, 0, sizeof(parsers));
-    memset(filter, 0, sizeof(filter));
-
-    filter[LUA_TFUNCTION] = true;
+    memset(filters, 0, sizeof(filters));
+    globals.clear();
 }
 
 void rt_clear_cache(lua_State* L) {
@@ -159,7 +177,7 @@ int rt2var(variable_t* var, lua_State* L, int index, int depth) {
     
     int type = lua_type(L, index);
 
-    if (filter[type]) {
+    if (filters[type]) {
         return false;
     }
 
@@ -189,7 +207,8 @@ int rt2var(variable_t* var, lua_State* L, int index, int depth) {
         break;
     }
     case LUA_TSTRING: {
-        strcpy(var->value, lua_tostring(L, index));
+        strncpy(var->value, lua_tostring(L, index), ZLUA_FILE_MAX);
+        var->value[ZLUA_FILE_MAX - 1] = '/0';
         break;
     }
     case LUA_TUSERDATA: {
@@ -226,23 +245,20 @@ int rt2var(variable_t* var, lua_State* L, int index, int depth) {
         lua_pushnil(L);
         while (lua_next(L, index)) {
             if (depth > 1) {
-                variable_t* v = new variable_t;
+                variable_t v;
                 const auto name_type = lua_type(L, -2);
-                v->name_type = name_type;
+                v.name_type = name_type;
                 if (name_type == LUA_TSTRING || name_type == LUA_TNUMBER || name_type == LUA_TBOOLEAN) {
                     lua_pushvalue(L, -2);
-                    strcpy(v->name, lua_tostring(L, -1));
+                    strcpy(v.name, lua_tostring(L, -1));
                     lua_pop(L, 1);
                 }
                 else {
-                    rt2pt(v->name, L, -2);
+                    rt2pt(v.name, L, -2);
                 }
 
-                if (rt2var(v, L, -1, depth - 1)) {
+                if (rt2var(&v, L, -1, depth - 1)) {
                     var->childs.push_back(v);
-                }
-                else {
-                    delete v;
                 }
             }
             lua_pop(L, 1);
@@ -250,15 +266,12 @@ int rt2var(variable_t* var, lua_State* L, int index, int depth) {
         }
 
         if (lua_getmetatable(L, index)) {
-            variable_t* meta = new variable_t;
-            strcpy(meta->name, "metatable");
-            meta->name_type = LUA_TSTRING;
+            variable_t meta;
+            strcpy(meta.name, "metatable");
+            meta.name_type = LUA_TSTRING;
 
-            if (rt2var(meta, L, -1, 2)) {
+            if (rt2var(&meta, L, -1, 2)) {
                 var->childs.push_back(meta);
-            }
-            else {
-                delete meta;
             }
 
             {
@@ -267,8 +280,8 @@ int rt2var(variable_t* var, lua_State* L, int index, int depth) {
                     variable_t v;
                     rt2var(&v, L, -1, 2);
                     if (depth > 1) {
-                        for (auto* child : v.childs) {
-                            var->childs.push_back(var_clone(child));
+                        for (auto child : v.childs) {
+                            var->childs.push_back(child);
                         }
                     }
                     size += v.childs.size();
@@ -287,7 +300,7 @@ int rt2var(variable_t* var, lua_State* L, int index, int depth) {
     return true;
 }
 
-int rt2stacks(std::vector<stack_t*>& stacks, lua_State* L) {
+int rt2stacks(std::vector<stack_t>& stacks, lua_State* L) {
     stacks.clear();
 
     for (int level = 0;; level++) {
@@ -299,8 +312,7 @@ int rt2stacks(std::vector<stack_t*>& stacks, lua_State* L) {
             continue;
         }
 
-        auto stack = new stack_t{ rt2file(L, ar), ar.name, level, ar.currentline };
-        stacks.push_back(stack);
+        stack_t stack{ rt2file(L, ar), ar.name, level, ar.currentline };
 
         for (int i = 1;; i++) {
             const char* name = lua_getlocal(L, &ar, i);
@@ -312,13 +324,10 @@ int rt2stacks(std::vector<stack_t*>& stacks, lua_State* L) {
                 continue;
             }
 
-            auto var = new variable_t;
-            strcpy(var->name, name);
-            if (rt2var(var, L, -1, 1)) {
-                stack->local_vars.push_back(var);
-            }
-            else {
-                delete var;
+            variable_t var ;
+            strcpy(var.name, name);
+            if (rt2var(&var, L, -1, 1)) {
+                stack.local_vars.push_back(var);
             }
             lua_pop(L, 1);
         }
@@ -331,14 +340,10 @@ int rt2stacks(std::vector<stack_t*>& stacks, lua_State* L) {
                     break;
                 }
 
-                // add up variable
-                auto var = new variable_t;
-                strcpy(var->name, name);
-                if (rt2var(var, L, -1, 1)) {
-                    stack->upvalue_vars.push_back(var);
-                }
-                else {
-                    delete var;
+                variable_t var;
+                strcpy(var.name, name);
+                if (rt2var(&var, L, -1, 1)) {
+                    stack.upvalue_vars.push_back(var);
                 }
 
                 lua_pop(L, 1);
@@ -347,6 +352,18 @@ int rt2stacks(std::vector<stack_t*>& stacks, lua_State* L) {
             lua_pop(L, 1);
         }
 
+        for (auto global : globals) {
+            lua_getglobal(L, global.s);
+            if (!lua_isnil(L, -1)) {
+                variable_t var;
+                strcpy(var.name, global.s);
+                if (rt2var(&var, L, -1, 1)) {
+                    stack.global_vars.push_back(var);
+                }
+            }
+            lua_pop(L, 1);
+        }
+        stacks.push_back(stack);
     }
     return true;
 }

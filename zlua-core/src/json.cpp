@@ -20,23 +20,23 @@ std::string GBK2UTF8(const char* strin) {
     return res;
 }
 
-int var2json(rapidjson::Value& container, const variable_t* var, rapidjson::MemoryPoolAllocator<>& alloc) {
-    container.AddMember("name", std::string(var->name), alloc);
-    container.AddMember("nameType", var->name_type, alloc);
-    container.AddMember("value", GBK2UTF8(var->value), alloc);
-    container.AddMember("valueType", var->value_type, alloc);
-    container.AddMember("valueTypeName", std::string(var->value_type_name), alloc);
-    container.AddMember("cacheId", var->cache_id, alloc);
+int var2json(rapidjson::Value& container, const variable_t& var, rapidjson::MemoryPoolAllocator<>& alloc) {
+    container.AddMember("name", std::string(var.name), alloc);
+    container.AddMember("nameType", var.name_type, alloc);
+    container.AddMember("value", GBK2UTF8(var.value), alloc);
+    container.AddMember("valueType", var.value_type, alloc);
+    container.AddMember("valueTypeName", std::string(var.value_type_name), alloc);
+    container.AddMember("cacheId", var.cache_id, alloc);
 
-    if (!var->childs.empty()) {
+    if (!var.childs.empty()) {
         rapidjson::Value json_child_vars(rapidjson::kArrayType);
-        vars2json(json_child_vars, var->childs, alloc);
+        vars2json(json_child_vars, var.childs, alloc);
         container.AddMember("children", json_child_vars, alloc);
     }
     return true;
 }
 
-int vars2json(rapidjson::Value& container, const std::vector<variable_t*>& vars, rapidjson::MemoryPoolAllocator<>& alloc) {
+int vars2json(rapidjson::Value& container, const std::vector<variable_t>& vars, rapidjson::MemoryPoolAllocator<>& alloc) {
     for (auto var : vars) {
         rapidjson::Value json_var(rapidjson::kObjectType);
         var2json(json_var, var, alloc);
@@ -45,25 +45,29 @@ int vars2json(rapidjson::Value& container, const std::vector<variable_t*>& vars,
     return true;
 }
 
-int stacks2json(rapidjson::Document& document, std::vector<stack_t*>& stacks, rapidjson::MemoryPoolAllocator<>& alloc) {
+int stacks2json(rapidjson::Document& document, std::vector<stack_t>& stacks, rapidjson::MemoryPoolAllocator<>& alloc) {
     rapidjson::Value json_stacks(rapidjson::kArrayType);
     
     for (auto stack : stacks) {
         rapidjson::Value json_stack(rapidjson::kObjectType);
-        json_stack.AddMember("file", std::string(stack->file), alloc);
-        json_stack.AddMember("line", stack->line, alloc);
-        json_stack.AddMember("level", stack->level, alloc);
-        if (stack->chunk) {
-            json_stack.AddMember("functionName", std::string(stack->chunk), alloc);
+        json_stack.AddMember("file", std::string(stack.file), alloc);
+        json_stack.AddMember("line", stack.line, alloc);
+        json_stack.AddMember("level", stack.level, alloc);
+        if (stack.chunk) {
+            json_stack.AddMember("functionName", std::string(stack.chunk), alloc);
         }
 
         rapidjson::Value json_local_vars(rapidjson::kArrayType);
-        vars2json(json_local_vars, stack->local_vars, alloc);
+        vars2json(json_local_vars, stack.local_vars, alloc);
         json_stack.AddMember("localVariables", json_local_vars, alloc);
 
         rapidjson::Value json_upvalue_vars(rapidjson::kArrayType);
-        vars2json(json_upvalue_vars, stack->upvalue_vars, alloc);
+        vars2json(json_upvalue_vars, stack.upvalue_vars, alloc);
         json_stack.AddMember("upvalueVariables", json_upvalue_vars, alloc);
+
+        rapidjson::Value json_gloabl_vars(rapidjson::kArrayType);
+        vars2json(json_gloabl_vars, stack.global_vars, alloc);
+        json_stack.AddMember("globalVariables", json_gloabl_vars, alloc);
 
         json_stacks.PushBack(json_stack, alloc);
     }
@@ -78,7 +82,7 @@ int eval2json(rapidjson::Document& document, const eval_t& eval, rapidjson::Memo
     document.AddMember("success", eval.success, alloc);
     if (eval.success) {
         rapidjson::Value v(rapidjson::kObjectType);
-        var2json(v, &eval.result, alloc);
+        var2json(v, eval.result, alloc);
         document.AddMember("value", v, alloc);
     }
     else {
