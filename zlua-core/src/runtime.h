@@ -37,7 +37,7 @@ struct eval_t {
 void rt_init();
 
 void rt_clear_cache(lua_State* L);
-int rt_eval_cache(eval_t& eval, lua_State* L);
+int rt_eval(eval_t& eval, lua_State* L);
 
 int rt_set_parser(int type, fn_parser parser);
 int rt_set_filter(int type, int enable);

@@ -63,8 +63,11 @@ extern "C"
     ZLUA_API void lua_getfield(lua_State* L, int idx, const char* k);
     ZLUA_API void lua_setfield(lua_State* L, int idx, const char* k);
     ZLUA_API void lua_rawset(lua_State* L, int idx);
+    ZLUA_API int lua_setmetatable(lua_State* L, int objindex);
+    ZLUA_API int lua_setfenv(lua_State* L, int idx);
 
     ZLUA_API int lua_sethook(lua_State* L, lua_Hook func, int mask, int count);
+    ZLUA_API int luaL_loadstring(lua_State* L, const char* s);
 
     ZLUA_API void lua_settop(lua_State* L, int idx);
     ZLUA_API int lua_gettop(lua_State* L);
@@ -107,6 +110,14 @@ extern "C"
 #define LUA_OK 0
 #endif
 
+#ifndef LUA_ERRRUN
+#define LUA_ERRRUN 2
+#endif
+
+#ifndef LUA_ERRSYNTAX
+#define LUA_ERRSYNTAX 3
+#endif
+
 #ifndef lua_pop
 #define lua_pop(L,n) lua_settop(L, -(n)-1)
 #endif
@@ -126,6 +137,10 @@ extern "C"
 
 #ifndef lua_pushcfunction
 #define lua_pushcfunction(L,f) lua_pushcclosure(L, (f), 0)
+#endif
+
+#ifndef lua_upvalueindex
+#define lua_upvalueindex(i)	(LUA_GLOBALSINDEX-(i))
 #endif
 
 #ifndef lua_getglobal
@@ -150,7 +165,6 @@ extern "C"
 
 #define ZLUA_FILE_MAX 260
 #define ZLUA_TYPE_COUNT 9
-
 
 //#define EMMY
 

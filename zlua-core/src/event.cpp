@@ -95,7 +95,7 @@ int event_eval(conn_t* conn, const rapidjson::Document& document) {
     eval_t eval;
     json2eval(eval, document);
     for (auto L : states)
-        if (rt_eval_cache(eval, L)) {
+        if (rt_eval(eval, L)) {
             rapidjson::Document document;
             document.SetObject();
             auto& alloc = document.GetAllocator();

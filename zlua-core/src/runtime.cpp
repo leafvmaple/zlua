@@ -368,7 +368,83 @@ int rt2stacks(std::vector<stack_t>& stacks, lua_State* L) {
     return true;
 }
 
-int rt_eval_cache(eval_t& eval, lua_State* L)
+int cclosure(lua_State* L) {
+    const int locals = lua_upvalueindex(1);
+    const int upvalues = lua_upvalueindex(2);
+    const char* name = lua_tostring(L, 2);
+
+    lua_getfield(L, upvalues, name);
+    if (!lua_isnil(L, -1)) {
+        return 1;
+    }
+    lua_pop(L, 1);
+
+    lua_getfield(L, locals, name);
+    if (!lua_isnil(L, -1)) {
+        return 1;
+    }
+    lua_pop(L, 1);
+
+    lua_getglobal(L, name);
+    if (!lua_isnil(L, -1)) {
+        return 1;
+    }
+    lua_pop(L, 1);
+
+    return 0;
+}
+
+int create_env(lua_State* L, int level) {
+    lua_Debug ar {};
+    if (!lua_getstack(L, level, &ar)) {
+        return false;
+    }
+    if (!lua_getinfo(L, "nSlu", &ar)) {
+        return false;
+    }
+
+    lua_newtable(L);
+    const int env = lua_gettop(L);
+    lua_newtable(L);
+    const int meta = lua_gettop(L);
+    lua_newtable(L);
+    const int locals = lua_gettop(L);
+    lua_newtable(L);
+    const int upvalues = lua_gettop(L);
+
+    for (int i = 1; ; i++) {
+        const char* name = lua_getlocal(L, &ar, i);
+        if (name == nullptr)
+            break;
+        if (name[0] == '(') {
+            lua_pop(L, 1);
+            continue;
+        }
+        lua_setfield(L, locals, name);
+    }
+ 
+    if (lua_getinfo(L, "f", &ar)) {
+        const int fIdx = lua_gettop(L);
+        for (int i = 1; ; i++) {
+            const char* name = lua_getupvalue(L, fIdx, i);
+            if (name == nullptr)
+                break;
+            lua_setfield(L, upvalues, name);
+        }
+        lua_pop(L, 1);
+    }
+    int top = lua_gettop(L);
+
+    lua_pushcclosure(L, cclosure, 2);
+
+    lua_setfield(L, meta, "__index");
+    lua_setmetatable(L, env);
+
+    top = lua_gettop(L);
+    return true;
+}
+
+int rt_eval(eval_t& eval, lua_State* L)
 {
     if (eval.cache_id > 0) {
         lua_getfield(L, LUA_REGISTRYINDEX, CACHE_TABLE_NAME);
@@ -384,6 +460,40 @@ int rt_eval_cache(eval_t& eval, lua_State* L)
             eval.success = true;
         }
         lua_pop(L, 1);
+    }
+    else {
+        do 
+        {
+            char expr[ZLUA_FILE_MAX];
+            sprintf(expr, "return %s", eval.expr);
+
+            int r = luaL_loadstring(L, expr);
+            if (r == LUA_ERRSYNTAX) {
+                sprintf(eval.error, "syntax err:  %s", eval.expr);
+                break;
+            }
+
+            const int idx = lua_gettop(L);
+
+            if (!create_env(L, eval.level))
+                break;
+
+            lua_setfenv(L, idx);
+
+            r = lua_pcall(L, 0, 1, 0);
+            if (r == LUA_OK) {
+                strcpy(eval.result.name, eval.expr);
+                rt2var(&eval.result, L, -1, eval.depth);
+                lua_pop(L, 1);
+                eval.success = true;
+            }
+            if (r == LUA_ERRRUN) {
+                strcpy(eval.error, lua_tostring(L, -1));
+                lua_pop(L, 1);
+            }
+
+        } while (0);
+        
     }
     return eval.success;
 }
