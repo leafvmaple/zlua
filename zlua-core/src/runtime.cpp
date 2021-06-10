@@ -54,7 +54,7 @@ void rt_parser(variable_t* var, lua_State* L) {
 
             lua_pushvalue(L, top);
             int res = lua_pcall(L, 1, 1, 0);
-            if (res != LUA_OK || !lua_istable(L, -1))
+            if (res || !lua_istable(L, -1))
                 break;
         }
 
@@ -143,6 +143,10 @@ const char* rt2file(lua_State* L, lua_Debug& ar) {
     const char* res = ar.source;
     if (strlen(res) > 0 && res[0] == '@')
         ++res;
+#ifdef _WIN32
+    if (strlen(res) > 0 && (res[0] == '\\' || res[0] == '/'))
+        ++res;
+#endif
     return res;
 }
 
@@ -481,7 +485,7 @@ int rt_eval(eval_t& eval, lua_State* L)
             lua_setfenv(L, idx);
 
             r = lua_pcall(L, 0, 1, 0);
-            if (r == LUA_OK) {
+            if (!r) {
                 strcpy(eval.result.name, eval.expr);
                 rt2var(&eval.result, L, -1, eval.depth);
                 lua_pop(L, 1);
