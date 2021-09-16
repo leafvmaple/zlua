@@ -1,4 +1,5 @@
 #include "runtime.h"
+#include <string>
 
 #define CACHE_TABLE_NAME "_cache_table_"
 
@@ -67,7 +68,7 @@ void rt_parser(variable_t* var, lua_State* L) {
             v.name_type = lua_type(L, -1);
 
             lua_pushvalue(L, -2);
-            strcpy(v.name, lua_tostring(L, -1));
+            v.name = lua_tostring(L, -1);
             lua_pop(L, 1);
 
             if (rt2var(&v, L, -1, 1)) {
@@ -170,8 +171,17 @@ int rt2meta(lua_State* L, int idx, const char* method, int param_cnt, int& resul
     return false;
 }
 
-int rt2pt(char* val, lua_State* L, int index) {
-    sprintf(val, "%s(0x%X)", lua_typename(L, lua_type(L, index)), lua_topointer(L, index));
+int rt2pt(std::string& val, lua_State* L, int index) {
+    char res[ZLUA_FILE_MAX];
+    sprintf(res, "%s(0x%X)", lua_typename(L, lua_type(L, index)), lua_topointer(L, index));
+    val = res;
+    return true;
+}
+
+int rt2table(std::string& val, lua_State* L, int index, int size) {
+    char res[ZLUA_FILE_MAX];
+    sprintf(res, "table(0x%X, size = %d)", lua_topointer(L, index), size);
+    val = res;
     return true;
 }
 
@@ -199,20 +209,19 @@ int rt2var(variable_t* var, lua_State* L, int index, int depth) {
 
     switch (type) {
     case LUA_TNIL: {
-        strcpy(var->value, "nil");
+        var->value = "nil";
         break;
     }
     case LUA_TNUMBER: {
-        strcpy(var->value, lua_tostring(L, index));
+        var->value = lua_tostring(L, index);
         break;
     }
     case LUA_TBOOLEAN: {
-        strcpy(var->value, lua_toboolean(L, index) ? "true" : "false");
+        var->value = lua_toboolean(L, index) ? "true" : "false";
         break;
     }
     case LUA_TSTRING: {
-        strncpy(var->value, lua_tostring(L, index), ZLUA_FILE_MAX);
-        var->value[ZLUA_FILE_MAX - 1] = '/0';
+        var->value = lua_tostring(L, index);
         break;
     }
     case LUA_TUSERDATA: {
@@ -225,7 +234,7 @@ int rt2var(variable_t* var, lua_State* L, int index, int depth) {
             }
         }
         if (string) {
-            strcpy(var->value, string);
+            var->value = string;
         }
         else {
             rt2pt(var->value, L, index);
@@ -254,7 +263,7 @@ int rt2var(variable_t* var, lua_State* L, int index, int depth) {
                 v.name_type = name_type;
                 if (name_type == LUA_TSTRING || name_type == LUA_TNUMBER || name_type == LUA_TBOOLEAN) {
                     lua_pushvalue(L, -2);
-                    strcpy(v.name, lua_tostring(L, -1));
+                    v.name = lua_tostring(L, -1);
                     lua_pop(L, 1);
                 }
                 else {
@@ -271,7 +280,7 @@ int rt2var(variable_t* var, lua_State* L, int index, int depth) {
 
         if (lua_getmetatable(L, index)) {
             variable_t meta;
-            strcpy(meta.name, "metatable");
+            meta.name = "metatable";
             meta.name_type = LUA_TSTRING;
 
             if (rt2var(&meta, L, -1, 2)) {
@@ -296,7 +305,7 @@ int rt2var(variable_t* var, lua_State* L, int index, int depth) {
             lua_pop(L, 1);
         }
 
-        sprintf(var->value, "table(0x%X, size = %d)", lua_topointer(L, index), size);
+        rt2table(var->value, L, index, size);
         break;
     }
     }
@@ -329,7 +338,7 @@ int rt2stacks(std::vector<stack_t>& stacks, lua_State* L) {
             }
 
             variable_t var ;
-            strcpy(var.name, name);
+            var.name = name;
             if (rt2var(&var, L, -1, 1)) {
                 stack.local_vars.push_back(var);
             }
@@ -345,7 +354,7 @@ int rt2stacks(std::vector<stack_t>& stacks, lua_State* L) {
                 }
 
                 variable_t var;
-                strcpy(var.name, name);
+                var.name = name;
                 if (rt2var(&var, L, -1, 1)) {
                     stack.upvalue_vars.push_back(var);
                 }
@@ -360,7 +369,7 @@ int rt2stacks(std::vector<stack_t>& stacks, lua_State* L) {
             lua_getglobal(L, global.s);
             if (!lua_isnil(L, -1)) {
                 variable_t var;
-                strcpy(var.name, global.s);
+                var.name = global.s;
                 if (rt2var(&var, L, -1, 1)) {
                     stack.global_vars.push_back(var);
                 }
@@ -457,7 +466,7 @@ int rt_eval(eval_t& eval, lua_State* L)
             sprintf(key, "%d", eval.cache_id);;
             lua_getfield(L, -1, key);
 
-            strcpy(eval.result.name, eval.expr);
+            eval.result.name = eval.expr;
             rt2var(&eval.result, L, -1, eval.depth);
             lua_pop(L, 1);
 
@@ -486,7 +495,7 @@ int rt_eval(eval_t& eval, lua_State* L)
 
             r = lua_pcall(L, 0, 1, 0);
             if (!r) {
-                strcpy(eval.result.name, eval.expr);
+                eval.result.name = eval.expr;
                 rt2var(&eval.result, L, -1, eval.depth);
                 lua_pop(L, 1);
                 eval.success = true;

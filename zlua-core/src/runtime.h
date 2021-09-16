@@ -2,11 +2,12 @@
 
 #include "zlua.h"
 #include <vector>
+#include <string>
 
 struct variable_t {
-    char name[ZLUA_FILE_MAX];
+    std::string name;
     int name_type;
-    char value[ZLUA_FILE_MAX];
+    std::string value;
     int value_type;
     const char* value_type_name;
     std::vector<variable_t> childs;
