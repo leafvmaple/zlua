@@ -14,9 +14,12 @@ int lua_absindex(lua_State* L, int idx) {
 }
 #endif
 
-int zlua_init() {
+int zlua_init(lua_State* L) {
     rt_init();
-    event_init();
+    event_init(L);
+
+    lua_newtable(L, -1);
+    lua_setglobal(L, "zlua");
 
     return true;
 }
@@ -27,15 +30,6 @@ int zlua_listen(const char* host, int port, char* err){
         return 0;
 
     return conn_listen(conn, host, port, err);
-}
-
-int zlua_add_state(lua_State* L) {
-    event_add_state(L);
-
-    lua_newtable(L, -1);
-    lua_setglobal(L, "zlua");
-
-    return true;
 }
 
 int zlua_set_parser(int type, fn_parser parser) {

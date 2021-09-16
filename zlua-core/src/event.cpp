@@ -15,7 +15,7 @@ fn events[(int)PROTO::count];
 
 int event_send(conn_t* conn, PROTO proto, rapidjson::Document& document, rapidjson::MemoryPoolAllocator<>& alloc);
 
-std::set<lua_State*> states;
+lua_State* gL = nullptr;
 
 void send_data(conn_t* conn, lua_State* L) {
     std::vector<stack_t> stacks;
@@ -45,9 +45,7 @@ void on_hook(lua_State* L, lua_Debug* ar) {
 }
 
 int event_init(conn_t* conn, const rapidjson::Document& document) {
-    for (auto L : states) {
-        lua_sethook(L, on_hook, LUA_MASKCALL | LUA_MASKLINE | LUA_MASKRET, 0);
-    }
+    lua_sethook(gL, on_hook, LUA_MASKCALL | LUA_MASKLINE | LUA_MASKRET, 0);
 
     if (document.HasMember("globals")) {
         const auto globals = document["globals"].GetArray();
@@ -94,37 +92,32 @@ int event_add_bp(conn_t* conn, const rapidjson::Document& document) {
 int event_eval(conn_t* conn, const rapidjson::Document& document) {
     eval_t eval;
     json2eval(eval, document);
-    for (auto L : states)
-        if (rt_eval(eval, L)) {
-            rapidjson::Document document;
-            document.SetObject();
-            auto& alloc = document.GetAllocator();
+    if (rt_eval(eval, gL)) {
+        rapidjson::Document document;
+        document.SetObject();
+        auto& alloc = document.GetAllocator();
 
-            eval2json(document, eval, alloc);
-            event_send(conn, PROTO::s2c_eval, document, alloc);
-        }
+        eval2json(document, eval, alloc);
+        event_send(conn, PROTO::s2c_eval, document, alloc);
+    }
 
     return true;
 }
 
 int event_action(conn_t* conn, const rapidjson::Document& document) {
     const auto action = static_cast<Action>(document["action"].GetInt());
-    for (auto L : states)
-        action_excute(action, conn, L);
+    action_excute(action, conn, gL);
 
     return true;
 }
 
-void event_init() {
+void event_init(lua_State* L) {
+    gL = L;
+
     register_event(c2s_init,            event_init);
     register_event(c2s_add_break_point, event_add_bp);
     register_event(c2s_action,          event_action);
     register_event(c2s_eval,            event_eval);
-}
-
-void event_add_state(lua_State* L)
-{
-    states.insert(L);
 }
 
 int event_handle(conn_t* conn, const char* buf, size_t len) {

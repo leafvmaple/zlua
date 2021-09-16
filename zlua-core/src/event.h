@@ -48,7 +48,6 @@ enum class Action {
 };
 
 
-void event_init();
-void event_add_state(lua_State* L);
+void event_init(lua_State* L);
 
 int event_handle(conn_t* conn, const char* buf, size_t len);

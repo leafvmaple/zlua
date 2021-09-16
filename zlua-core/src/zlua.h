@@ -21,8 +21,7 @@ extern "C" {
 
 typedef int (*fn_parser)(lua_State* L);
 
-ZLUA_API int zlua_init();
+ZLUA_API int zlua_init(lua_State* L);
 ZLUA_API int zlua_listen(const char* host, int port, char* err = nullptr);
-ZLUA_API int zlua_add_state(lua_State* L);
 
 ZLUA_API int zlua_set_parser(int type, fn_parser parser);
