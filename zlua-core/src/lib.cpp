@@ -18,7 +18,7 @@ int zlua_init(lua_State* L) {
     rt_init();
     event_init(L);
 
-    lua_newtable(L, -1);
+    lua_newtable(L);
     lua_setglobal(L, "zlua");
 
     return true;
