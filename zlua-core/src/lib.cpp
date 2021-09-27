@@ -1,9 +1,12 @@
 #include <assert.h>
 
 #include "zlua.h"
+
+#include "runtime.h"
 #include "event.h"
 #include "connect.h"
-#include "runtime.h"
+
+Connection* conn = nullptr;
 
 #ifdef LUA_51
 int lua_absindex(lua_State* L, int idx) {
@@ -15,8 +18,8 @@ int lua_absindex(lua_State* L, int idx) {
 #endif
 
 int zlua_init(lua_State* L) {
-    rt_init();
-    event_init(L);
+    RuntimeInit();
+    EventInit(L);
 
     lua_newtable(L);
     lua_setglobal(L, "zlua");
@@ -24,14 +27,15 @@ int zlua_init(lua_State* L) {
     return true;
 }
 
-int zlua_listen(const char* host, int port, char* err){
-    conn_t* conn = conn_new();
+int zlua_listen(const char* host, int port, char* err) {
+    conn = new Connection;
     if (!conn)
         return 0;
 
-    return conn_listen(conn, host, port, err);
+    return conn->Listen(host, port, err);
 }
 
-int zlua_set_parser(int type, fn_parser parser) {
-    return rt_set_parser(type, parser);
+int zlua_set_parser(int type, parser_proto parser) {
+    Variable::SetCustomParser(type, parser);
+    return true;
 }

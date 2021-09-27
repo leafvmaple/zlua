@@ -1,7 +1,14 @@
 #include "json.h"
 
+#include "stringbuffer.h"
+#include "writer.h"
+#include "document.h"
+#include "rapidjson.h"
+
 #include <string>
 #include <windows.h>
+
+int GetVariables(rapidjson::Value& container, const std::vector<Variable>& vars, rapidjson::MemoryPoolAllocator<>& alloc);
 
 std::string GBK2UTF8(std::string const strin) {
     int len = MultiByteToWideChar(CP_ACP, 0, strin.c_str(), -1, NULL, 0);
@@ -20,34 +27,76 @@ std::string GBK2UTF8(std::string const strin) {
     return res;
 }
 
-int var2json(rapidjson::Value& container, const variable_t& var, rapidjson::MemoryPoolAllocator<>& alloc) {
-    container.AddMember("name", std::string(var.name), alloc);
-    container.AddMember("nameType", var.name_type, alloc);
-    container.AddMember("value", GBK2UTF8(var.value), alloc);
-    container.AddMember("valueType", var.value_type, alloc);
-    container.AddMember("valueTypeName", std::string(var.value_type_name), alloc);
-    container.AddMember("cacheId", var.cache_id, alloc);
+int GetVariable(rapidjson::Value& container, const Variable& var, rapidjson::MemoryPoolAllocator<>& alloc) {
+    container.AddMember("name", var.name_, alloc);
+    container.AddMember("nameType", var.name_type_, alloc);
+    container.AddMember("value", GBK2UTF8(var.value_), alloc);
+    container.AddMember("valueType", var.value_type_, alloc);
+    container.AddMember("valueTypeName", var.value_type_name_, alloc);
+    container.AddMember("cacheId", var.cache_id_, alloc);
 
-    if (!var.childs.empty()) {
+    if (!var.childs_.empty()) {
         rapidjson::Value json_child_vars(rapidjson::kArrayType);
-        vars2json(json_child_vars, var.childs, alloc);
+        GetVariables(json_child_vars, var.childs_, alloc);
         container.AddMember("children", json_child_vars, alloc);
     }
     return true;
 }
 
-int vars2json(rapidjson::Value& container, const std::vector<variable_t>& vars, rapidjson::MemoryPoolAllocator<>& alloc) {
+int GetVariables(rapidjson::Value& container, const std::vector<Variable>& vars, rapidjson::MemoryPoolAllocator<>& alloc) {
     for (auto var : vars) {
         rapidjson::Value json_var(rapidjson::kObjectType);
-        var2json(json_var, var, alloc);
+        GetVariable(json_var, var, alloc);
         container.PushBack(json_var, alloc);
     }
     return true;
 }
 
-int stacks2json(rapidjson::Document& document, std::vector<stack_t>& stacks, rapidjson::MemoryPoolAllocator<>& alloc) {
+int GetEvaluate(rapidjson::Document& document, const Evaluate& eval, rapidjson::MemoryPoolAllocator<>& alloc)
+{
+    document.AddMember("seq", eval.seq_, alloc);
+    document.AddMember("success", eval.success_, alloc);
+    if (eval.success_) {
+        rapidjson::Value v(rapidjson::kObjectType);
+        GetVariable(v, eval.result_, alloc);
+        document.AddMember("value", v, alloc);
+    }
+    else {
+        document.AddMember("error", eval.error_, alloc);
+    }
+    return true;
+}
+
+int GetBreakPoint(BreakPoint& bp, const rapidjson::Value& value) {
+    if (value.HasMember("file")) {
+        bp.path_ = value["file"].GetString();
+    }
+    if (value.HasMember("line")) {
+        bp.line_ = value["line"].GetInt();
+    }
+    if (value.HasMember("condition")) {
+        bp.cond_ = value["condition"].GetString();
+    }
+    if (value.HasMember("logMessage")) {
+        bp.log_ = value["file"].GetString();
+    }
+
+    return true;
+}
+
+Json::Json()
+{
+     document_.SetObject();
+}
+
+int Json::FromRuntime(lua_State* L)
+{
+    rapidjson::MemoryPoolAllocator<>& alloc = document_.GetAllocator();
     rapidjson::Value json_stacks(rapidjson::kArrayType);
-    
+    std::vector<Stack> stacks;
+
+    GetRuntimeStacks(stacks, L);
+
     for (auto stack : stacks) {
         rapidjson::Value json_stack(rapidjson::kObjectType);
         json_stack.AddMember("file", std::string(stack.file), alloc);
@@ -58,65 +107,50 @@ int stacks2json(rapidjson::Document& document, std::vector<stack_t>& stacks, rap
         }
 
         rapidjson::Value json_local_vars(rapidjson::kArrayType);
-        vars2json(json_local_vars, stack.local_vars, alloc);
+        GetVariables(json_local_vars, stack.local_vars, alloc);
         json_stack.AddMember("localVariables", json_local_vars, alloc);
 
         rapidjson::Value json_upvalue_vars(rapidjson::kArrayType);
-        vars2json(json_upvalue_vars, stack.upvalue_vars, alloc);
+        GetVariables(json_upvalue_vars, stack.upvalue_vars, alloc);
         json_stack.AddMember("upvalueVariables", json_upvalue_vars, alloc);
 
         rapidjson::Value json_gloabl_vars(rapidjson::kArrayType);
-        vars2json(json_gloabl_vars, stack.global_vars, alloc);
+        GetVariables(json_gloabl_vars, stack.global_vars, alloc);
         json_stack.AddMember("globalVariables", json_gloabl_vars, alloc);
 
         json_stacks.PushBack(json_stack, alloc);
     }
 
-    document.AddMember("stacks", json_stacks, alloc);
+    document_.AddMember("stacks", json_stacks, alloc);
     return true;
 }
 
-int eval2json(rapidjson::Document& document, const eval_t& eval, rapidjson::MemoryPoolAllocator<>& alloc)
+
+int Json::FromEvaluate(Evaluate* evalute)
 {
-    document.AddMember("seq", eval.seq, alloc);
-    document.AddMember("success", eval.success, alloc);
-    if (eval.success) {
+    rapidjson::MemoryPoolAllocator<>& alloc = document_.GetAllocator();
+
+    document_.AddMember("seq", evalute->seq_, alloc);
+    document_.AddMember("success", evalute->success_, alloc);
+    if (evalute->success_) {
         rapidjson::Value v(rapidjson::kObjectType);
-        var2json(v, eval.result, alloc);
-        document.AddMember("value", v, alloc);
+        GetVariable(v, evalute->result_, alloc);
+        document_.AddMember("value", v, alloc);
     }
     else {
-        document.AddMember("error", eval.error, alloc);
+        document_.AddMember("error", evalute->error_, alloc);
     }
     return true;
 }
 
-int json2bp(breakpoint_t& bp, const rapidjson::Value& value) {
-    if (value.HasMember("file")) {
-        strcpy(bp.file, value["file"].GetString());
-        str2paths(bp.path, bp.file);
-    }
-    if (value.HasMember("line")) {
-        bp.line = value["line"].GetInt();
-    }
-    if (value.HasMember("condition")) {
-        strcpy(bp.cond, value["condition"].GetString());
-    }
-    if (value.HasMember("logMessage")) {
-        strcpy(bp.log, value["file"].GetString());
-    }
-
-    return true;
-}
-
-int json2eval(eval_t& eval, const rapidjson::Value& value)
+int Json::AddCommand(int cmd)
 {
-    eval.seq = value["seq"].GetInt();
-    strcpy(eval.expr, value["expr"].GetString());
-    eval.level = value["stackLevel"].GetInt();
-    eval.depth = value["depth"].GetInt();
-    eval.cache_id = value.HasMember("cacheId") ? value["cacheId"].GetInt() : 0;
-    eval.success = false;
+    rapidjson::MemoryPoolAllocator<>& alloc = document_.GetAllocator();
+    document_.AddMember("cmd", cmd, alloc);
+}
 
-    return true;
+int Json::Write(rapidjson::StringBuffer& buffer)
+{
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+    document_.Accept(writer);
 }

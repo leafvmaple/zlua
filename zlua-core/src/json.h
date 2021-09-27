@@ -1,17 +1,28 @@
 #pragma once
 
-#include "document.h"
-#include "rapidjson.h"
-
 #include "model.h"
 #include "runtime.h"
+#include "rapidjson.h"
+#include "stringbuffer.h"
 
 #include <vector>
 
-int var2json(rapidjson::Value& container, const variable_t& var, rapidjson::MemoryPoolAllocator<>& alloc);
-int vars2json(rapidjson::Value& container, const std::vector<variable_t>& vars, rapidjson::MemoryPoolAllocator<>& alloc);
-int stacks2json(rapidjson::Document& document, std::vector<stack_t>& stacks, rapidjson::MemoryPoolAllocator<>& alloc);
-int eval2json(rapidjson::Document& document, const eval_t& eval, rapidjson::MemoryPoolAllocator<>& alloc);
+class Evaluate;
 
-int json2bp(breakpoint_t& bp, const rapidjson::Value& value);
-int json2eval(eval_t& eval, const rapidjson::Value& value);
+class Json
+{
+public:
+    Json();
+
+    int FromRuntime(lua_State* L);
+    int FromEvaluate(Evaluate* evalute);
+
+    int AddCommand(int cmd);
+    int Write(rapidjson::StringBuffer& buffer);
+
+private:
+    rapidjson::Document document_;
+};
+
+int GetBreakPoint(BreakPoint& bp, const rapidjson::Value& value);
+int json2eval(Evaluate& eval, const rapidjson::Value& value);

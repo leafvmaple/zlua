@@ -2,12 +2,17 @@
 
 #define MIN(a, b) (((a)<(b))?(a):(b))
 
+#include "zlua.h"
+#include "document.h"
+
 #include <string>
 #include <vector>
 #include <algorithm>
-#include "zlua.h"
+#include <string>
+#include <map>
+#include <mutex>
 
-struct conn_t;
+class Connection;
 
 struct key_t {
     int line;
@@ -22,37 +27,60 @@ struct key_t {
     }
 };
 
-struct path_t {
-    std::vector<std::string> vals;
+class RelativePath {
+    std::vector<std::string> values;
 
-    bool operator == (const path_t& rh) const {
-        size_t mlen = MIN(vals.size(), rh.vals.size());
+public:
+    RelativePath() {};
+    RelativePath(const char* raw_path) {
+        // Unsafe
+        int len = strlen(raw_path);
+        char* path = new char[len];
+        memcpy(path, raw_path, len);
+        for (int i = strlen(path); i >= 0; i--) {
+            if (path[i] == '\\' || path[i] == '/') {
+                values.push_back(&path[i + 1]);
+                path[i] = '\0';
+            }
+            else {
+                path[i] = tolower(path[i]);
+            }
+        }
+        delete[] path;
+    }
+
+    bool operator == (const RelativePath& rh) const {
+        size_t mlen = MIN(values.size(), rh.values.size());
         for (int i = 0; i < mlen; i++)
-            if (vals[i] != rh.vals[i])
+            if (values[i] != rh.values[i])
                 return false;
         return true;
     }
 };
 
-struct breakpoint_t {
-    int line;
-    char file[ZLUA_FILE_MAX];
-    char cond[ZLUA_FILE_MAX];
-    char log[ZLUA_FILE_MAX];
+class BreakPoint {
+public:
+    static std::mutex mutex_;
+    static std::map<unsigned int, std::vector<BreakPoint>> map_;
 
-    path_t path;
+    int line_;
+    Connection* conn_;
 
-    conn_t* conn;
+    std::string cond_;
+    std::string log_;
 
-    breakpoint_t() {}
+    RelativePath path_;
 
-    breakpoint_t(const char* f) {
-        strcpy(file, f);
+    BreakPoint() : line_(0), conn_(nullptr) {}
+    BreakPoint(const char* raw_path) : BreakPoint() {
+        path_ = raw_path;
     }
+
+    int LoadFromJson(const rapidjson::Value& value);
+
+    static Connection* Find(lua_State* L, lua_Debug* ar);
+    static int Add(const BreakPoint& bp);
+    static void Clear();
+
+    int Process(lua_State* L);
 };
-
-int str2paths(path_t& path, const char* str);
-
-conn_t* bp_find(lua_State* L, lua_Debug* ar);
-int bp_clear();
-int bp_add(const breakpoint_t& bp);

@@ -1,9 +1,8 @@
 #pragma once
 
 #include "zlua.h"
-#include <set>
 
-struct conn_t;
+class Connection;
 
 enum class PROTO {
     unknown,
@@ -48,6 +47,6 @@ enum class Action {
 };
 
 
-void event_init(lua_State* L);
+void EventInit(lua_State* L);
 
-int event_handle(conn_t* conn, const char* buf, size_t len);
+int EventHandle(Connection* conn, const char* buf, size_t len);

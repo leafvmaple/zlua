@@ -1,63 +1,54 @@
 #include "model.h"
 
-#include <windows.h>
-#include <string>
-#include <map>
-#include <vector>
-#include <mutex>
+int BreakPoint::Add(const BreakPoint& bp)
+{
+    std::lock_guard <std::mutex> lock(mutex_);
+    map_[bp.line_].push_back(bp);
 
-std::mutex mutex_bp;
-std::map<DWORD, std::vector<breakpoint_t>> bp_set;
-
-int str2paths(path_t& path, const char* str) {
-    char t[ZLUA_FILE_MAX];
-    if (strlen(str) >= ZLUA_FILE_MAX) {
-        return false;
-    }
-    strcpy(t, str);
-    for (int i = strlen(t); i >= 0; i--) {
-        if (t[i] == '\\' || t[i] == '/') {
-            path.vals.push_back(&t[i + 1]);
-            t[i] = '\0';
-        }
-        else {
-            t[i] = tolower(t[i]);
-        }
-    }
     return true;
 }
 
-int bp_process(lua_State* L, breakpoint_t* bp) {
+void BreakPoint::Clear()
+{
+    std::lock_guard <std::mutex> lock(mutex_);
+    map_.clear();
+}
+
+int BreakPoint::LoadFromJson(const rapidjson::Value& value)
+{
+    if (value.HasMember("file")) {
+        path_ = value["file"].GetString();
+    }
+    if (value.HasMember("line")) {
+        line_ = value["line"].GetInt();
+    }
+    if (value.HasMember("condition")) {
+        cond_ = value["condition"].GetString();
+    }
+    if (value.HasMember("logMessage")) {
+        log_ = value["file"].GetString();
+    }
+
     return true;
 }
 
-conn_t* bp_find(lua_State* L, lua_Debug* ar) {
+Connection* BreakPoint::Find(lua_State* L, lua_Debug* ar)
+{
     const int cl = ar->currentline;
     if (cl >= 0) {
-        auto it_set = bp_set.find(cl);
-        if (it_set != bp_set.end()) {
+        auto it = BreakPoint::map_.find(cl);
+        if (it != map_.end()) {
             lua_getinfo(L, "S", ar);
-            for (auto bp : it_set->second) {
-                path_t path;
-                if (str2paths(path, ar->source) && bp.path == path && bp_process(L, &bp))
-                    return bp.conn;
+            for (auto breakpoint : it->second) {
+                if (breakpoint.path_ == ar->source && breakpoint.Process(L))
+                    return breakpoint.conn_;
             }
         }
     }
     return 0;
 }
 
-int bp_clear()
+int BreakPoint::Process(lua_State* L)
 {
-    std::lock_guard <std::mutex> lock(mutex_bp);
-    bp_set.clear();
-
-    return true;
-}
-
-int bp_add(const breakpoint_t& bp) {
-    std::lock_guard <std::mutex> lock(mutex_bp);
-    bp_set[bp.line].push_back(bp);
-
     return true;
 }

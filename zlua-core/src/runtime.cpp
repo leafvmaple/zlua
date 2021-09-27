@@ -5,84 +5,6 @@
 
 int cache_gen = 0;
 
-struct ZString {
-    char s[ZLUA_FILE_MAX];
-    ZString(const char* in) {
-        strcpy(s, in);
-    }
-};
-
-fn_parser parsers[ZLUA_TYPE_COUNT];
-int filters[ZLUA_TYPE_COUNT];
-std::vector<ZString> globals;
-
-
-int rt2var(variable_t* var, lua_State* L, int index, int depth);
-
-int rt_set_parser(int type, fn_parser parser) {
-    parsers[type] = parser;
-    return true;
-}
-
-int rt_set_filter(int type, int enable)
-{
-    filters[type] = enable;
-    return true;
-}
-
-int rt_add_global(const char* global)
-{
-    globals.push_back(global);
-    return true;
-}
-
-
-void rt_parser(variable_t* var, lua_State* L) {
-    int top = lua_gettop(L);
-
-    do 
-    {
-        int succes = parsers[var->value_type] && parsers[var->value_type](L);
-
-        if (!succes) {
-            lua_getglobal(L, "zlua");
-            if (!lua_istable(L, -1))
-                break;
-
-            lua_getfield(L, -1, "parser");
-            if (!lua_isfunction(L, -1))
-                break;
-
-            lua_pushvalue(L, top);
-            int res = lua_pcall(L, 1, 1, 0);
-            if (res || !lua_istable(L, -1))
-                break;
-        }
-
-        if (!lua_istable(L, -1))
-            break;
-
-        lua_pushnil(L);
-        while (lua_next(L, -2)) {
-            variable_t v;
-            v.name_type = lua_type(L, -1);
-
-            lua_pushvalue(L, -2);
-            v.name = lua_tostring(L, -1);
-            lua_pop(L, 1);
-
-            if (rt2var(&v, L, -1, 1)) {
-                var->childs.push_back(v);
-            }
-
-            lua_pop(L, 1);
-        }
-
-    } while (0);
-
-    lua_settop(L, top);
-}
-
 /*variable_t* var_clone(variable_t* src) {
     variable_t* res = new variable_t;
 
@@ -100,47 +22,11 @@ void rt_parser(variable_t* var, lua_State* L) {
     return res;
 }*/
 
-int rt_add_cache(lua_State* L, int idx, variable_t* var) {
-    const int type = lua_type(L, idx);
-    if (type == LUA_TUSERDATA || type == LUA_TTABLE) {
-        var->cache_id = ++cache_gen;
-        const int t1 = lua_gettop(L);
-        lua_getfield(L, LUA_REGISTRYINDEX, CACHE_TABLE_NAME);
-        if (lua_isnil(L, -1)) {
-            lua_pop(L, 1);
-            lua_newtable(L);
-            lua_setfield(L, LUA_REGISTRYINDEX, CACHE_TABLE_NAME);
-            lua_getfield(L, LUA_REGISTRYINDEX, CACHE_TABLE_NAME);
-        }
-        lua_pushvalue(L, idx);
-        char key[10];
-        sprintf(key, "%d", cache_gen);
-        lua_setfield(L, -2, key);
-        lua_settop(L, t1);
-    }
-    else {
-        var->cache_id = 0;
-    }
-    return true;
-}
-
-void rt_init()
+void RuntimeInit()
 {
-    memset(parsers, 0, sizeof(parsers));
-    memset(filters, 0, sizeof(filters));
-    globals.clear();
 }
 
-void rt_clear_cache(lua_State* L) {
-    lua_getfield(L, LUA_REGISTRYINDEX, CACHE_TABLE_NAME);
-    if (!lua_isnil(L, -1)) {
-        lua_pushnil(L);
-        lua_setfield(L, LUA_REGISTRYINDEX, CACHE_TABLE_NAME);
-    }
-    lua_pop(L, 1);
-}
-
-const char* rt2file(lua_State* L, lua_Debug& ar) {
+const char* GetFile(lua_State* L, lua_Debug& ar) {
     const char* res = ar.source;
     if (strlen(res) > 0 && res[0] == '@')
         ++res;
@@ -151,7 +37,8 @@ const char* rt2file(lua_State* L, lua_Debug& ar) {
     return res;
 }
 
-int rt2meta(lua_State* L, int idx, const char* method, int param_cnt, int& result) {
+int ParseMetable(std::string& val, lua_State* L, int idx, const char* method, int param_cnt) {
+    int result = false;
     if (lua_getmetatable(L, idx)) {
         const int meta_idx = lua_gettop(L);
         if (!lua_isnil(L, meta_idx)) {
@@ -166,154 +53,34 @@ int rt2meta(lua_State* L, int idx, const char* method, int param_cnt, int& resul
             result = lua_pcall(L, 1, param_cnt, 0);
         }
         lua_remove(L, meta_idx);
+
+        if (!result) {
+            return false;
+        }
+
+        val = lua_tostring(L, -1);
+        lua_pop(L, 1);
+
         return true;
     }
     return false;
 }
 
-int rt2pt(std::string& val, lua_State* L, int index) {
+int ParsePoint(std::string& val, lua_State* L, int index) {
     char res[ZLUA_FILE_MAX];
     sprintf(res, "%s(0x%X)", lua_typename(L, lua_type(L, index)), lua_topointer(L, index));
     val = res;
     return true;
 }
 
-int rt2table(std::string& val, lua_State* L, int index, int size) {
+int ParseTable(std::string& val, lua_State* L, int index, int size) {
     char res[ZLUA_FILE_MAX];
     sprintf(res, "table(0x%X, size = %d)", lua_topointer(L, index), size);
     val = res;
     return true;
 }
 
-int rt2var(variable_t* var, lua_State* L, int index, int depth) {
-    const int t1 = lua_gettop(L);
-    index = lua_absindex(L, index);
-    
-    int type = lua_type(L, index);
-
-    if (filters[type]) {
-        return false;
-    }
-
-    var->name_type = LUA_TSTRING;
-    var->value_type = type;
-    var->value_type_name = lua_typename(L, var->value_type);
-    var->cache_id = 0;
-
-    if (type == LUA_TUSERDATA || type == LUA_TTABLE) {
-        rt_add_cache(L, index, var);
-        if (depth > 1) {
-            rt_parser(var, L);
-        }
-    }
-
-    switch (type) {
-    case LUA_TNIL: {
-        var->value = "nil";
-        break;
-    }
-    case LUA_TNUMBER: {
-        var->value = lua_tostring(L, index);
-        break;
-    }
-    case LUA_TBOOLEAN: {
-        var->value = lua_toboolean(L, index) ? "true" : "false";
-        break;
-    }
-    case LUA_TSTRING: {
-        var->value = lua_tostring(L, index);
-        break;
-    }
-    case LUA_TUSERDATA: {
-        auto string = lua_tostring(L, index);
-        if (!string) {
-            int result;
-            if (rt2meta(L, t1, "__tostring", 1, result) && !result) {
-                string = lua_tostring(L, -1);
-                lua_pop(L, 1);
-            }
-        }
-        if (string) {
-            var->value = string;
-        }
-        else {
-            rt2pt(var->value, L, index);
-        }
-        if (depth > 1) {
-            if (lua_getmetatable(L, index)) {
-                rt2var(var, L, -1, depth);
-                lua_pop(L, 1); // pop meta
-            }
-        }
-        break;
-    }
-    case LUA_TFUNCTION:
-    case LUA_TLIGHTUSERDATA:
-    case LUA_TTHREAD: {
-        rt2pt(var->value, L, index);
-        break;
-    }
-    case LUA_TTABLE: {
-        int size = 0;
-        lua_pushnil(L);
-        while (lua_next(L, index)) {
-            if (depth > 1) {
-                variable_t v;
-                const auto name_type = lua_type(L, -2);
-                v.name_type = name_type;
-                if (name_type == LUA_TSTRING || name_type == LUA_TNUMBER || name_type == LUA_TBOOLEAN) {
-                    lua_pushvalue(L, -2);
-                    v.name = lua_tostring(L, -1);
-                    lua_pop(L, 1);
-                }
-                else {
-                    rt2pt(v.name, L, -2);
-                }
-
-                if (rt2var(&v, L, -1, depth - 1)) {
-                    var->childs.push_back(v);
-                }
-            }
-            lua_pop(L, 1);
-            size++;
-        }
-
-        if (lua_getmetatable(L, index)) {
-            variable_t meta;
-            meta.name = "metatable";
-            meta.name_type = LUA_TSTRING;
-
-            if (rt2var(&meta, L, -1, 2)) {
-                var->childs.push_back(meta);
-            }
-
-            {
-                lua_getfield(L, -1, "__index");
-                if (!lua_isnil(L, -1)) {
-                    variable_t v;
-                    rt2var(&v, L, -1, 2);
-                    if (depth > 1) {
-                        for (auto child : v.childs) {
-                            var->childs.push_back(child);
-                        }
-                    }
-                    size += v.childs.size();
-                }
-                lua_pop(L, 1);
-            }
-
-            lua_pop(L, 1);
-        }
-
-        rt2table(var->value, L, index, size);
-        break;
-    }
-    }
-
-    return true;
-}
-
-int rt2stacks(std::vector<stack_t>& stacks, lua_State* L) {
+int GetRuntimeStacks(std::vector<Stack>& stacks, lua_State* L) {
     stacks.clear();
 
     for (int level = 0;; level++) {
@@ -325,7 +92,7 @@ int rt2stacks(std::vector<stack_t>& stacks, lua_State* L) {
             continue;
         }
 
-        stack_t stack{ rt2file(L, ar), ar.name, level, ar.currentline };
+        Stack stack{ GetFile(L, ar), ar.name, level, ar.currentline };
 
         for (int i = 1;; i++) {
             const char* name = lua_getlocal(L, &ar, i);
@@ -337,9 +104,9 @@ int rt2stacks(std::vector<stack_t>& stacks, lua_State* L) {
                 continue;
             }
 
-            variable_t var ;
-            var.name = name;
-            if (rt2var(&var, L, -1, 1)) {
+            Variable var ;
+            var.name_ = name;
+            if (var.Parse(L, -1, 1)) {
                 stack.local_vars.push_back(var);
             }
             lua_pop(L, 1);
@@ -353,9 +120,9 @@ int rt2stacks(std::vector<stack_t>& stacks, lua_State* L) {
                     break;
                 }
 
-                variable_t var;
-                var.name = name;
-                if (rt2var(&var, L, -1, 1)) {
+                Variable var;
+                var.name_ = name;
+                if (var.Parse(L, -1, 1)) {
                     stack.upvalue_vars.push_back(var);
                 }
 
@@ -365,17 +132,17 @@ int rt2stacks(std::vector<stack_t>& stacks, lua_State* L) {
             lua_pop(L, 1);
         }
 
-        for (auto global : globals) {
-            lua_getglobal(L, global.s);
+        /*for (auto global : globals) {
+            lua_getglobal(L, global.c_str());
             if (!lua_isnil(L, -1)) {
-                variable_t var;
-                var.name = global.s;
-                if (rt2var(&var, L, -1, 1)) {
+                Variable var;
+                var.name_ = global;
+                if (var.Parse(L, -1, 1)) {
                     stack.global_vars.push_back(var);
                 }
             }
             lua_pop(L, 1);
-        }
+        }*/
         stacks.push_back(stack);
     }
     return true;
@@ -407,7 +174,7 @@ int cclosure(lua_State* L) {
     return 0;
 }
 
-int create_env(lua_State* L, int level) {
+int CreateEnv(lua_State* L, int level) {
     lua_Debug ar {};
     if (!lua_getstack(L, level, &ar)) {
         return false;
@@ -457,56 +224,289 @@ int create_env(lua_State* L, int level) {
     return true;
 }
 
-int rt_eval(eval_t& eval, lua_State* L)
+int Evaluate::FromJson(const rapidjson::Document& value)
 {
-    if (eval.cache_id > 0) {
+    seq_ = value["seq"].GetInt();
+    expr_ = value["expr"].GetString();
+    level_ = value["stackLevel"].GetInt();
+    depth_ = value["depth"].GetInt();
+    cache_id_ = value.HasMember("cacheId") ? value["cacheId"].GetInt() : 0;
+    success_ = false;
+
+    return true;
+}
+
+int Evaluate::FromRuntime(lua_State* L)
+{
+    if (cache_id_ > 0) {
         lua_getfield(L, LUA_REGISTRYINDEX, CACHE_TABLE_NAME);
         if (lua_type(L, -1) == LUA_TTABLE) {
             char key[10];
-            sprintf(key, "%d", eval.cache_id);;
+            sprintf(key, "%d", cache_id_);;
             lua_getfield(L, -1, key);
 
-            eval.result.name = eval.expr;
-            rt2var(&eval.result, L, -1, eval.depth);
+            result_.name_ = expr_;
+            result_.Parse(L, -1, depth_);
             lua_pop(L, 1);
 
-            eval.success = true;
+            success_ = true;
         }
         lua_pop(L, 1);
     }
     else {
-        do 
+        do
         {
-            char expr[ZLUA_FILE_MAX];
-            sprintf(expr, "return %s", eval.expr);
-
-            int r = luaL_loadstring(L, expr);
+            int r = luaL_loadstring(L, ("return " + expr_).c_str());
             if (r == LUA_ERRSYNTAX) {
-                sprintf(eval.error, "syntax err:  %s", eval.expr);
+                error_ = "syntax err:  " + expr_;
                 break;
             }
 
             const int idx = lua_gettop(L);
 
-            if (!create_env(L, eval.level))
+            if (!CreateEnv(L, level_))
                 break;
 
             lua_setfenv(L, idx);
 
             r = lua_pcall(L, 0, 1, 0);
             if (!r) {
-                eval.result.name = eval.expr;
-                rt2var(&eval.result, L, -1, eval.depth);
+                result_.name_ = expr_;
+                result_.Parse(L, -1, depth_);
                 lua_pop(L, 1);
-                eval.success = true;
+                success_ = true;
             }
             if (r == LUA_ERRRUN) {
-                strcpy(eval.error, lua_tostring(L, -1));
+                error_ = lua_tostring(L, -1);
                 lua_pop(L, 1);
             }
 
         } while (0);
-        
+
     }
-    return eval.success;
+    return success_;
+}
+
+Variable::Variable() : name_type_(0), value_type_(0) {}
+
+Variable::Variable(std::string name) : Variable()
+{
+    name_ = name;
+}
+
+
+int Variable::Parse(lua_State* L, int index, int depth)
+{
+    const int t1 = lua_gettop(L);
+    index = lua_absindex(L, index);
+
+    int type = lua_type(L, index);
+
+    if (filters[type]) {
+        return false;
+    }
+
+    name_type_ = LUA_TSTRING;
+    value_type_ = type;
+    value_type_name_ = lua_typename(L, value_type_);
+    cache_id_ = 0;
+
+    if (type == LUA_TUSERDATA || type == LUA_TTABLE) {
+        AddCache(L, index);
+        if (depth > 1) {
+            CustomParse(L);
+        }
+    }
+
+    switch (type) {
+    case LUA_TNIL: {
+        value_ = "nil";
+        break;
+    }
+    case LUA_TNUMBER: {
+        value_ = lua_tostring(L, index);
+        break;
+    }
+    case LUA_TBOOLEAN: {
+        value_ = lua_toboolean(L, index) ? "true" : "false";
+        break;
+    }
+    case LUA_TSTRING: {
+        value_ = lua_tostring(L, index);
+        break;
+    }
+    case LUA_TUSERDATA: {
+        auto string = lua_tostring(L, index);
+        if (string) {
+            value_ = string;
+        }
+        else if (!ParseMetable(value_, L, t1, "__tostring", 1)) {
+            ParsePoint(value_, L, index);
+        }
+        if (depth > 1) {
+            if (lua_getmetatable(L, index)) {
+                Parse(L, -1, depth);
+                lua_pop(L, 1); // pop meta
+            }
+        }
+        break;
+    }
+    case LUA_TFUNCTION:
+    case LUA_TLIGHTUSERDATA:
+    case LUA_TTHREAD: {
+        ParsePoint(value_, L, index);
+        break;
+    }
+    case LUA_TTABLE: {
+        int size = 0;
+        lua_pushnil(L);
+        while (lua_next(L, index)) {
+            if (depth > 1) {
+                Variable v;
+                const auto name_type = lua_type(L, -2);
+                v.name_type_ = name_type;
+                if (name_type == LUA_TSTRING || name_type == LUA_TNUMBER || name_type == LUA_TBOOLEAN) {
+                    lua_pushvalue(L, -2);
+                    v.name_ = lua_tostring(L, -1);
+                    lua_pop(L, 1);
+                }
+                else {
+                    ParsePoint(v.name_, L, -2);
+                }
+
+                if (v.Parse(L, -1, depth - 1)) {
+                    childs_.push_back(v);
+                }
+            }
+            lua_pop(L, 1);
+            size++;
+        }
+
+        if (lua_getmetatable(L, index)) {
+            Variable meta;
+            meta.name_ = "metatable";
+            meta.name_type_ = LUA_TSTRING;
+
+            if (meta.Parse(L, -1, 2)) {
+                childs_.push_back(meta);
+            }
+
+            {
+                lua_getfield(L, -1, "__index");
+                if (!lua_isnil(L, -1)) {
+                    Variable v;
+                    v.Parse(L, -1, 2);
+                    if (depth > 1) {
+                        for (auto child : v.childs_) {
+                            childs_.push_back(child);
+                        }
+                    }
+                    size += v.childs_.size();
+                }
+                lua_pop(L, 1);
+            }
+
+            lua_pop(L, 1);
+        }
+
+        ParseTable(value_, L, index, size);
+        break;
+    }
+    }
+
+    return true;
+}
+
+int Variable::CustomParse(lua_State* L)
+{
+    int top = lua_gettop(L);
+
+    do
+    {
+        int succes = parsers[value_type_] && parsers[value_type_](L);
+
+        if (!succes) {
+            lua_getglobal(L, "zlua");
+            if (!lua_istable(L, -1))
+                break;
+
+            lua_getfield(L, -1, "parser");
+            if (!lua_isfunction(L, -1))
+                break;
+
+            lua_pushvalue(L, top);
+            int res = lua_pcall(L, 1, 1, 0);
+            if (res || !lua_istable(L, -1))
+                break;
+        }
+
+        if (!lua_istable(L, -1))
+            break;
+
+        lua_pushnil(L);
+        while (lua_next(L, -2)) {
+            Variable v;
+            v.name_type_ = lua_type(L, -1);
+
+            lua_pushvalue(L, -2);
+            v.name_ = lua_tostring(L, -1);
+            lua_pop(L, 1);
+
+            if (v.Parse(L, -1, 1)) {
+                childs_.push_back(v);
+            }
+
+            lua_pop(L, 1);
+        }
+
+    } while (0);
+
+    lua_settop(L, top);
+}
+
+
+int Variable::AddCache(lua_State* L, int idx)
+{
+    const int type = lua_type(L, idx);
+    if (type == LUA_TUSERDATA || type == LUA_TTABLE) {
+        cache_id_ = ++cache_gen;
+        const int top = lua_gettop(L);
+        lua_getfield(L, LUA_REGISTRYINDEX, CACHE_TABLE_NAME);
+        if (lua_isnil(L, -1)) {
+            lua_pop(L, 1);
+            lua_newtable(L);
+            lua_setfield(L, LUA_REGISTRYINDEX, CACHE_TABLE_NAME);
+            lua_getfield(L, LUA_REGISTRYINDEX, CACHE_TABLE_NAME);
+        }
+        lua_pushvalue(L, idx);
+        char key[10];
+        sprintf(key, "%d", cache_gen);
+        lua_setfield(L, -2, key);
+        lua_settop(L, top);
+    }
+    else {
+        cache_id_ = 0;
+    }
+    return true;
+}
+
+
+void Variable::ClearCache(lua_State* L)
+{
+    lua_getfield(L, LUA_REGISTRYINDEX, CACHE_TABLE_NAME);
+    if (!lua_isnil(L, -1)) {
+        lua_pushnil(L);
+        lua_setfield(L, LUA_REGISTRYINDEX, CACHE_TABLE_NAME);
+    }
+    lua_pop(L, 1);
+}
+
+void Variable::SetCustomParser(int type, parser_proto parser)
+{
+    parsers[type] = parser;
+}
+
+void Variable::SetFilter(int type, int enable)
+{
+    filters[type] = enable;
 }

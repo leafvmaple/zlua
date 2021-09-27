@@ -16,17 +16,17 @@ struct action_t {
     int line = 0;
     int stack_level;
 
-    conn_t* conn;
+    Connection* conn;
     fn cur_action;
 };
 
-std::map<conn_t*, action_t> actions;
+std::map<Connection*, action_t> actions;
 
 void action_break(lua_State* L) {
     std::unique_lock<std::mutex> lock(mutex_run);
     cv.wait(lock);
 
-    rt_clear_cache(L);
+    Variable::ClearCache(L);
 }
 
 int get_stack_level(lua_State* L) {
@@ -74,7 +74,7 @@ int update_step_out(action_t* action, lua_State* L, lua_Debug* ar) {
     return false;
 }
 
-conn_t* action_find(lua_State* L, lua_Debug* ar) {
+Connection* action_find(lua_State* L, lua_Debug* ar) {
     for (auto& it : actions) {
         action_t* action = &it.second;
         if (action->cur_action) {
@@ -88,11 +88,11 @@ conn_t* action_find(lua_State* L, lua_Debug* ar) {
     return 0;
 }
 
-void action_continue(conn_t* conn, lua_State* L) {
+void action_continue(Connection* conn, lua_State* L) {
     cv.notify_all();
 }
 
-void action_step_over(conn_t* conn, lua_State* L) {
+void action_step_over(Connection* conn, lua_State* L) {
     lua_Debug ar{};
     action_t* action = &actions[conn];
 
@@ -107,7 +107,7 @@ void action_step_over(conn_t* conn, lua_State* L) {
     action->cur_action = update_step_over;
 }
 
-void action_step_in(conn_t* conn, lua_State* L) {
+void action_step_in(Connection* conn, lua_State* L) {
     action_t* action = &actions[conn];
 
     action->stack_level = get_stack_level(L);
@@ -116,7 +116,7 @@ void action_step_in(conn_t* conn, lua_State* L) {
     action->cur_action = update_step_in;
 }
 
-void action_step_out(conn_t* conn, lua_State* L) {
+void action_step_out(Connection* conn, lua_State* L) {
     lua_Debug ar{};
     action_t* action = &actions[conn];
 
@@ -131,15 +131,15 @@ void action_step_out(conn_t* conn, lua_State* L) {
     action->cur_action = update_step_out;
 }
 
-void action_stop(conn_t* conn, lua_State* L) {
-    bp_clear();
+void action_stop(Connection* conn, lua_State* L) {
+    BreakPoint::Clear();
 
     memset(&actions[conn], 0, sizeof(actions[conn]));
 
     cv.notify_all();
 }
 
-void action_excute(Action action, conn_t* conn, lua_State* L) {
+void action_excute(Action action, Connection* conn, lua_State* L) {
     switch (action)
     {
     case Action::ide_break:

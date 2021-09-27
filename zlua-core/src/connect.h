@@ -5,28 +5,37 @@
 
 #include <thread>
 
-struct conn_t {
-    uv_loop_t* loop;
-    uv_tcp_t server;
-    uv_tcp_t client;
-
-    char* buf;
-    size_t maxsize;
-    size_t size;
-
-    bool runing;
-    HANDLE thread;
-    DWORD threadId;
-
-    int head;
-};
-
 typedef struct {
     uv_write_t req;
     uv_buf_t buf;
     uv_stream_t* stream;
-} write_req_t;
+} WriteReq;
 
-conn_t* conn_new();
-int conn_listen(conn_t* conn, const char* host, int port, char* err);
-int conn_send(conn_t* conn, int cmd, const char* data, int len);
+class Connection
+{
+public:
+    Connection();
+
+    int Listen(const char* host, int port, char* err);
+    int Accept(uv_stream_t* server, int status);
+
+    int Send(int cmd, const char* data, int len);
+    int Receive(const char* data, size_t len);
+
+    int Run();
+
+    uv_tcp_t server_tcp_;
+    uv_tcp_t client_tcp_;
+
+    uv_loop_t* loop_;
+
+    char* buf_;
+    size_t max_size_;
+    size_t size_;
+
+    bool runing_;
+    HANDLE thread_;
+    DWORD thread_id_;
+
+    int head_;
+};
